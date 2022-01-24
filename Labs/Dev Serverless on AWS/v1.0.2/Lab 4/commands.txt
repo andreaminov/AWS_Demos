@@ -1,0 +1,112 @@
+# Step 7, Download and setup App in Cloud9
+wget https://us-west-2-tcprod.s3-us-west-2.amazonaws.com/courses/ILT-TF-200-SVDVSS/v1.0.2/lab-4-ObservabilityMonitoring/scripts/app-code.zip
+unzip app-code.zip
+cd app-code
+chmod +x startupscript.sh
+./startupscript.sh
+
+# Step 20, install Artillery, Faker and run script 
+cd test
+npm install artillery -g
+npm install faker
+artillery run simple-post.yaml
+
+#Step 46, Log Insight Query
+filter @type = "REPORT"
+| fields @requestId, @billedDuration
+| sort by @billedDuration desc
+
+#Step 50, Log Insight Query
+stats count(*) by @logStream
+    | limit 100
+
+# Step 73, Replacing Lambda code
+    var segment = AWSXRay.getSegment();
+    await addSegment(segment,message);
+
+# Step 75, Fill in Lambda placeholder
+const addSegment = (segment,message) => {
+
+    let bookmark = JSON.parse(message.body);
+    const f = async (subsegment) => {
+
+      subsegment.addAnnotation('uid',bookmark.id);
+      subsegment.addAnnotation('name',bookmark.name);
+      subsegment.addMetadata('bookmarkUrl', bookmark.bookmarkUrl);
+      subsegment.addMetadata('username', bookmark.username);
+
+      subsegment.close();
+    };
+    AWSXRay.captureAsyncFunc("adding annotations and metadata", f, segment);
+};
+
+# Step 75, Final Lambda code
+var AWSXRay = require('aws-xray-sdk');
+var AWS = AWSXRay.captureAWS(require('aws-sdk'));
+var dynamodb = AWSXRay.captureAWSClient(new AWS.DynamoDB());
+
+exports.handler = async message => {
+  console.log(message);
+
+  //Fail the messages randomly to see those errors in X-Ray tracing. It's for testing only.
+  if(Math.random() < 0.2)
+    throw new Error('An unknown error occurred');
+
+  //Can you throw a different response code other than 200?
+
+  //Timeout failures about 10%
+  if(Math.random() < 0.15) {
+     await new Promise(resolve => setTimeout(resolve, 10000));
+  };  
+
+  if (message.body) {
+    let bookmark = JSON.parse(message.body);
+    let params = {
+      TableName: process.env.TABLE_NAME,
+      Item: {
+        id: { S: bookmark.id },
+        bookmarkUrl: { S: bookmark.bookmarkUrl },
+        name: { S: bookmark.name },
+        description: { S: bookmark.description },
+        username: { S: bookmark.username },
+        shared: { BOOL: bookmark.shared }
+      }
+    };  
+
+    var segment = AWSXRay.getSegment();
+    await addSegment(segment,message);
+
+    console.log(`Adding bookmark to table ${process.env.TABLE_NAME}`);
+    await dynamodb.putItem(params).promise()
+    console.log(`New bookmark added to the inventory`);
+  }
+
+  return {};
+};
+
+const addSegment = (segment,message) => {
+
+    let bookmark = JSON.parse(message.body);
+    const f = async (subsegment) => {
+
+      subsegment.addAnnotation('uid',bookmark.id);
+      subsegment.addAnnotation('name',bookmark.name);
+      subsegment.addMetadata('bookmarkUrl', bookmark.bookmarkUrl);
+      subsegment.addMetadata('username', bookmark.username);
+
+      subsegment.close();
+    };
+    AWSXRay.captureAsyncFunc("adding annotations and metadata", f, segment);
+};
+
+# Step 78, Run the Artillery script again
+artillery run simple-post.yaml
+
+
+
+
+##################### Working Lab Notes
+
+API Invoke URI 
+https://joxk6etn13.execute-api.us-west-2.amazonaws.com/dev
+

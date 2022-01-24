@@ -1,0 +1,3 @@
+curl --location --request POST 'https://ugpiqriby4.execute-api.us-west-2.amazonaws.com/newsnack' \
+--header 'Content-Type: application/json' \
+--data-raw '{"Detail": {"snack-type": "Pie","snack-name": "Apple Pie"}}'

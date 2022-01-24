@@ -1,0 +1,276 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Developing Serverless Solutions on AWS - Try-it-out Exercises - Day 2
+
+Parameters:
+  AWSUser:
+    Default: awsstudent
+    Type: String    
+
+Resources:
+  
+  TryItOutDevEnv:
+    Type: AWS::Cloud9::EnvironmentEC2
+    Properties:
+      InstanceType: 't3.small'
+      OwnerArn: !Sub "arn:aws:iam::${AWS::AccountId}:user/${AWSUser}"
+      Description: IDE to handle all the project activities
+      AutomaticStopTimeMinutes: 90
+
+  TryItOutBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+
+  # Step Functions Section
+  CheckNameFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: "checknameFunction"
+      Runtime: nodejs12.x
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Handler: index.handler
+      Timeout: 3
+      Code:
+        ZipFile: |
+          'use strict';
+
+          const checkName = (data) => {
+              const { name } = data
+
+              if (name.toLowerCase().includes("unprocessable_data")) {
+                  const simulatedError = new Error(`Simulated error: Name '${name}' is not possible to check.`)
+                  simulatedError.name = 'UnprocessableDataException'
+                  throw simulatedError
+              }
+
+              const flagged = name.toLowerCase().includes('evil')
+              return { flagged }
+          }
+
+          const commandHandlers = {
+              'CHECK_NAME': checkName
+          }
+
+          module.exports.handler = (event, context, callback) => {
+              try {
+                  const { command, data } = event
+
+                  const result = commandHandlers[command](data)
+                  callback(null, result)
+              } catch (ex) {
+                  console.error(ex)
+                  console.info('event', JSON.stringify(event))
+                  callback(ex)
+              }
+          };
+  
+  StepFunctionsStateMachine:
+    Type: "AWS::StepFunctions::StateMachine"
+    Properties:
+      StateMachineName: "CheckName-Express"
+      DefinitionString: !Sub |
+          {
+              "StartAt": "Check Name",
+              "States": {
+                  "Check Name": {
+                      "Type": "Task",
+                      "Parameters": {
+                          "command": "CHECK_NAME",
+                          "data": {
+                              "name.$": "$.application.name"
+                          }
+                      },
+                      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:checknameFunction",
+                      "ResultPath": "$.checks.name",
+                      "Next": "Grant Access?"
+                  },
+                "Grant Access?": {
+                    "Type": "Choice",
+                    "Choices": [
+                      {
+                            "Variable": "$.checks.name.flagged",
+                            "BooleanEquals": true,
+                            "Next": "Denied"
+                          },
+                          {
+                            "Variable": "$.checks.name.flagged",
+                            "BooleanEquals": false,
+                            "Next": "Approved"
+                          }
+                    ]
+                },
+                "Approved": {
+                    "Type": "Pass",
+                    "End": true
+                },
+                "Denied": {
+                  "Type": "Fail",
+                  "Cause": "Evil!",
+                  "Error": "It's evil Spock!"
+                }
+              }
+          }
+      RoleArn: !GetAtt StepFunctionsExecutionRole.Arn
+      StateMachineType: "EXPRESS"
+      LoggingConfiguration: 
+        Destinations: 
+        - 
+          CloudWatchLogsLogGroup: 
+            LogGroupArn: !GetAtt CheckNameLogGroup.Arn
+        IncludeExecutionData: true
+        Level: "ALL"
+
+  # IAM Section
+  CheckNameLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: "/aws/vendedlogs/states/CheckName-Logs"
+
+  ReadOnlyGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: QLReadOnly
+      ManagedPolicyArns: ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+
+  GroupAssignment:
+    Type: AWS::IAM::UserToGroupAddition
+    DependsOn: ReadOnlyGroup
+    Properties:
+      GroupName: QLReadOnly
+      Users:
+        - !Sub ${AWSUser}
+
+  APIGatewayInvocationRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: APIGatewayInvocationRole
+      Path: /service-role/
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "apigateway.amazonaws.com"
+
+  StepFunctionsExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: checkname-execution-role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "states.amazonaws.com"
+      Path: /service-role/
+
+  LambdaExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+      Policies:
+        - PolicyName: AWSLambdaExecutionPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "sqs:*"
+                  - "sns:Publish"
+                Resource: "*"
+
+  ErrorProcessorRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: error-processor-role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSXrayFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+      Path: /service-role/
+
+  ServerlessAPIRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: serverless-api-role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+      Path: /service-role/
+      Policies:
+        - PolicyName: serverless-api-role-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:GetItem"
+                  - "dynamodb:DeleteItem"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:Scan"
+                  - "dynamodb:Query"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:BatchWriteItem"
+                  - "dynamodb:BatchGetItem"
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:ConditionCheckItem"
+                Resource:
+                  - "arn:aws:dynamodb:*:*:table/*-SampleTable-*"
+                  - "arn:aws:dynamodb:*:*:table/*-SampleTable-*/index/*"
+
+Outputs:
+  Region:
+    Value: !Ref 'AWS::Region'
+  APIGatewayInvocationRole:
+    Value: !GetAtt APIGatewayInvocationRole.Arn

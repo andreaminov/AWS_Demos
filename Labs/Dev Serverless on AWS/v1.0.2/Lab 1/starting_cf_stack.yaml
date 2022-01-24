@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Developing Serverless Solutions on AWS - Deploying a Simple Serverless Application
+
+Parameters:
+  AWSUser:
+    Default: awsstudent
+    Type: String 
+  S3ResourceBucket:
+    Type: String
+    Description: 'S3 Bucket of where to pull lab resources from'
+    Default: 'aws-training'
+  S3PathPrefix:
+    Type: String
+    Description: "The path prefix where lab resources are stored (Leading and trailing slash required!)"
+    Default: "courses/ILT-TF-200-SVDVSS/v1.0.2/lab-1-Bookmarks"
+    # Default: courses/ILT-TF-200-SVDVSS/v1.0.0/lab-1-bookmarks     
+
+
+Resources:
+  LabVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: Lab VPC
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref LabVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    DependsOn: AttachGateway
+    Properties:
+      VpcId: !Ref LabVPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+      Tags:
+        - Key: Name
+          Value: Public Subnet
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: PublicSubnet
+    Properties:
+      VpcId: !Ref LabVPC
+      Tags:
+        - Key: Name
+          Value: Public Route Table
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PublicRoute
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  Cloud9Instance:
+    Type: AWS::Cloud9::EnvironmentEC2
+    Properties:
+      InstanceType: 't3.large'
+      OwnerArn: !Sub "arn:aws:iam::${AWS::AccountId}:user/${AWSUser}"
+      Description: IDE to handle all the project activities
+      SubnetId: !Ref PublicSubnet
+      AutomaticStopTimeMinutes: 90
+      Name: !Sub BookmarkAppDevEnv-${AWS::StackName}
+
+  BookmarkBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+  
+  PresignupLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: nodejs12.x
+      Role: !GetAtt RoleForPreSignUpLambda.Arn
+      Handler: index.handler
+      Timeout: 30
+      Code:
+        ZipFile: |
+          exports.handler = (event, context, callback) => {
+            // Confirm the user
+            event.response.autoConfirmUser = true;
+            // Set the email as verified if it is in the request
+            if (event.request.userAttributes.hasOwnProperty("email")) {
+              event.response.autoVerifyEmail = true;
+            }
+            // Set the phone number as verified if it is in the request
+            if (event.request.userAttributes.hasOwnProperty("phone_number")) {
+              event.response.autoVerifyPhone = true;
+            }
+            // Return to Amazon Cognito
+            callback(null, event);
+          }
+    
+
+  SamDeploymentRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+      Policies:
+        - PolicyName: AWSXrayWriteOnlyAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "xray:PutTraceSegments"
+                  - "xray:PutTelemetryRecords"
+                  - "xray:GetSamplingRules"
+                  - "xray:GetSamplingTargets"
+                  - "xray:GetSamplingStatisticSummaries"
+                Resource: "*"
+        - PolicyName: AWSLambdaBasicExecutionRole
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+        - PolicyName: BookmarkDynamoDBRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:GetItem"
+                  - "dynamodb:DeleteItem"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:Scan"
+                  - "dynamodb:Query"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:BatchWriteItem"
+                  - "dynamodb:BatchGetItem"
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:ConditionCheckItem"
+                Resource: "*"               
+
+  ReadOnlyGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: QLReadOnly
+      ManagedPolicyArns: ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+
+  GroupAssignment:
+    Type: AWS::IAM::UserToGroupAddition
+    DependsOn: ReadOnlyGroup
+    Properties:
+      GroupName: QLReadOnly
+      Users:
+        - !Sub ${AWSUser}
+
+  RoleForPreSignUpLambda:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+      Policies:
+        - PolicyName: AWSLambdaBasicExecutionRole
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"   
+
+# UserPoolLambdaInvokePermission:
+#   Type: AWS::Lambda::Permission
+#   Properties:
+#     Action: lambda:invokeFunction
+#     Principal: cognito-idp.amazonaws.com
+#     FunctionName: <function-name>
+#     SourceArn: arn:aws:cognito-idp:<your region>:<your account>:userpool/*                
+
+Outputs:
+  
+  SamDeploymentRole:
+    Description: 'IAM Role for user to assume'
+    Value:
+      Fn::GetAtt: SamDeploymentRole.Arn
+  BookmarkBucket:
+    Description: 's3 bucket for uploading code'    
+    Value: !Ref BookmarkBucket
+  Region:
+    Value: !Ref 'AWS::Region'
+    Description: Region used for the lab     

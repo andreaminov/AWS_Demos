@@ -1,0 +1,107 @@
+# Step 6, Download and run startup script, which contains the application code
+wget https://us-west-2-tcprod.s3-us-west-2.amazonaws.com/courses/ILT-TF-200-SVDVSS/v1.0.2/lab-2-EventBridge/scripts/app-code.zip
+unzip app-code.zip
+cd app-code
+chmod +x startupscript.sh
+./startupscript.sh
+
+#Step 33, Lambda code
+const EventBridge = require('aws-sdk/clients/eventbridge')
+const ev = new EventBridge();
+
+exports.handler = async (event) => {
+    console.log(JSON.stringify(event, null, 2));
+    try
+    {
+        for(let i=0; i< event.Records.length; i++) {
+            const record = event.Records[i]
+            console.log(record.eventID);
+            console.log(record.eventName);
+            if(record.eventName === 'INSERT' || record.eventName === 'MODIFY') {
+                console.log('DynamoDB Record: %j', record.dynamodb);
+                console.log('share flag:', record.dynamodb.NewImage.shared.BOOL);
+                console.log('contest value: ', record.dynamodb.NewImage.contest.S);
+
+                var pk = record.dynamodb.NewImage.id.S;
+                var sharedFlag = record.dynamodb.NewImage.shared.BOOL;
+                var contestValue = record.dynamodb.NewImage.contest.S;
+
+                const bookmarkDetails = {
+                    id: pk,
+                    shared: sharedFlag,
+                    contest: contestValue,
+                    payload: record.dynamodb.NewImage
+                }
+
+                const params = {
+                Entries: [
+                  {
+                    Source: 'DynamoDB Streams',
+                    DetailType: 'Shared Bookmarks',
+                    EventBusName: 'bookmarks-bus',
+                    Detail: JSON.stringify(bookmarkDetails)
+                  }        
+                ]
+              };
+              const response =  await ev.putEvents(params).promise();
+              console.log("response:", response);
+              //We can optimize the code by calling the putEvents outside of the loop with promise all option. where all the records
+              //will put in the bus in parallel. 
+            }
+        }
+    } catch (error) {
+          throw new Error(JSON.stringify(error));
+    }
+
+} 
+
+# Step 54, Define EventBridge Event Pattern
+{
+  "source": [
+    "DynamoDB Streams"
+  ],
+  "detail-type": [
+    "Shared Bookmarks"
+  ]
+}
+
+# Step 61, Event Pattern for SNS Rule in EventBridge
+{
+  "source": [
+    "DynamoDB Streams"
+  ],
+  "detail-type": [
+    "Shared Bookmarks"
+  ],
+  "detail": {
+    "shared": [
+      true
+    ],
+    "contest": [
+      {
+        "anything-but": [
+          "Entering"
+        ]
+      }
+    ]
+  }
+}
+
+# Step 68. Event Pattern for the Invoke Contest Function in EventBridge
+{
+  "source": [
+    "DynamoDB Streams"
+  ],
+  "detail-type": [
+    "Shared Bookmarks"
+  ],
+  "detail": {
+    "shared": [
+      true
+    ],
+  "contest": [
+      "Entering"
+    ]
+  }
+}
+

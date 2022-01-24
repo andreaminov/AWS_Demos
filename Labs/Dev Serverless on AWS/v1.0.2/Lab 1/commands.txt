@@ -1,0 +1,63 @@
+# Step 7, Download source code
+cd ~/environment
+wget https://us-west-2-tcprod.s3-us-west-2.amazonaws.com/courses/ILT-TF-200-SVDVSS/v1.0.2/lab-1-Bookmarks/scripts/app-code.zip
+unzip app-code.zip
+cd app-code
+
+# Step 36, Running sam deploy command
+cd backend
+sam deploy
+
+# Step 52, Installing packages
+cd ../frontend
+npm install
+
+# Step 53, Running the dev server
+npm run dev
+
+# Step 57, Updating teh aws-exports.js file
+const awsmobile = {
+    "aws_project_region": "(REPLACE WITH REGION)",
+    "aws_cognito_region": "(REPLACE WITH REGION)",
+    "aws_user_pools_id": "(REPLACE WITH COGNITO ID POOL)",
+    "aws_user_pools_web_client_id": "(REPLACE WITH APP CLIENT ID)",
+    "oauth": {},
+    "aws_cloud_logic_custom": [
+        {
+            "name": "Bookmark App",
+            "endpoint": "(REPLACE WITH API GATEWAY INVOKE URL)",
+            "region": "(REPLACE WITH REGION)"
+        }
+    ]
+};
+
+export default awsmobile;
+
+# Step 51, Build the Application for production
+npm run build
+
+# Step 52, Changing directory
+cd dist
+ls
+
+# Step 53, Zip contents of the build folder
+ zip -r app.zip *
+
+# Step 54, Upload to s3
+aws s3 cp app.zip s3://(BOOKMARKBUCKET)
+
+
+
+############## Working Lab Notes
+
+    Pool Id 
+    us-west-2_OwQi5nxUf
+    
+    Pool ARN 
+    arn:aws:cognito-idp:us-west-2:376103771165:userpool/us-west-2_OwQi5nxUf
+
+    App client id
+   ae08tiq7ua1eiq6cn3hrhspoc
+
+    API URL 
+     https://7te6ldbmb8.execute-api.us-west-2.amazonaws.com/dev

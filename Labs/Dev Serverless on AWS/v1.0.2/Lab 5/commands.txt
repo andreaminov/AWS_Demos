@@ -1,0 +1,252 @@
+# Step 7, Download and run script to config app
+wget https://us-west-2-tcprod.s3-us-west-2.amazonaws.com/courses/ILT-TF-200-SVDVSS/v1.0.2/lab-5-Security/scripts/app-code.zip
+unzip app-code.zip
+cd app-code
+chmod +x startupscript.sh
+./startupscript.sh
+
+# Step 34, Install Artillery, Faker and run script
+cd test
+npm install artillery -g
+npm install faker
+artillery run simple-post.yaml
+
+# Step 35, Run artillery with Invoke URL
+artillery quick -n 20 --count 100 (Invoke URL)/bookmarks
+
+# Step 42, curl command
+curl (Invoke URL)/bookmarks/(id)
+
+# Step 50, Get Cloud9 IP Address
+34.212.211.62
+
+Step 78, API Gateway Resource Policy
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "execute-api:Invoke",
+      "Resource": "execute-api:/*/*/*"
+    },
+    {
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "execute-api:Invoke",
+      "Resource": "execute-api:/*/*/*",
+      "Condition": {
+        "NotIpAddress": {
+          "aws:SourceIp": ["(sourceIpOrCIDRBlock)"]
+        }
+      }
+    }
+  ]
+}
+
+#Step 107, Adding KMS Key
+aws kms encrypt --plaintext "Key Management Service Secrets" \
+                --query CiphertextBlob \
+                --output text \
+                --key-id (Key ID)
+
+#Step 115, Lambda code
+const aws = require('aws-sdk');
+
+const kmsSecret = process.env.KMS_SECRET;
+
+let decodedSecret;
+let DecodedKMSSecret;
+
+const kms = new aws.KMS();
+const ssm = new aws.SSM();
+const sm = new aws.SecretsManager();
+
+exports.handler = async message => {
+    console.log(message);
+    let secretType = message.pathParameters.id
+    console.log("Secret Type:", secretType);
+
+    if(secretType == 'kms')
+        decodedSecret = await decodeKMSSecret();
+    else if (secretType == 'ssm')
+        decodedSecret = await decodeSSMSecret();
+    else if (secretType == 'sm') {
+        var password = await decodeSMSecret(userId);
+        decodedSecret = "Password is: " + password;
+    }
+    else
+        decodedSecret = "Provide a valid secret type (kms, ssm, or sm (secrets manager))";
+
+    console.log(decodedSecret);
+    const response = {
+        statusCode: 200,
+        headers: {},
+        body: JSON.stringify('Plain text secret(s): ' + decodedSecret)
+    };
+    return response;
+};
+
+async function decodeKMSSecret() {
+    if (DecodedKMSSecret) {
+        return DecodedKMSSecret;
+    }
+    const params = {
+      CiphertextBlob: Buffer.from(kmsSecret, 'base64')
+    };
+    const data = await kms.decrypt(params).promise();
+    DecodedKMSSecret = data.Plaintext.toString('utf-8');
+    return DecodedKMSSecret;
+}
+
+# Step 149, store secrets in teh parameter store
+aws ssm put-parameter --name /db/secret --value 'Hello, Parameter Store!' --type SecureString
+
+# Step 156, Final Lambda code
+const aws = require('aws-sdk');
+
+const kmsSecret = process.env.KMS_SECRET;
+const ssmSecret = process.env.SSM_SECRET;
+
+let decodedSecret;
+let DecodedKMSSecret;
+
+const kms = new aws.KMS();
+const ssm = new aws.SSM();
+const sm = new aws.SecretsManager();
+
+exports.handler = async message => {
+    console.log(message);
+    let secretType = message.pathParameters.id
+    console.log("Secret Type:", secretType);
+
+    if(secretType == 'kms')
+        decodedSecret = await decodeKMSSecret();
+    else if (secretType == 'ssm')
+        decodedSecret = await decodeSSMSecret();
+    else if (secretType == 'sm') {
+        var password = await decodeSMSecret(userId);
+        decodedSecret = "Password is: " + password;
+    }
+    else
+        decodedSecret = "Provide a valid secret type (kms, ssm, or sm (secrets manager))";
+
+    console.log(decodedSecret);
+    const response = {
+        statusCode: 200,
+        headers: {},
+        body: JSON.stringify('Plain text secret(s): ' + decodedSecret)
+    };
+    return response;
+};
+
+async function decodeKMSSecret() {
+    if (DecodedKMSSecret) {
+        return DecodedKMSSecret;
+    }
+    const params = {
+      CiphertextBlob: Buffer.from(kmsSecret, 'base64')
+    };
+    const data = await kms.decrypt(params).promise();
+    DecodedKMSSecret = data.Plaintext.toString('utf-8');
+    return DecodedKMSSecret;
+}
+
+async function decodeSSMSecret() {
+    const params = {
+        Name: ssmSecret,
+        WithDecryption: true
+    };
+    const result = await ssm.getParameter(params).promise();
+    return result.Parameter.Value
+}
+
+# Step 155, create a secret
+aws secretsmanager create-secret --name dbUserId --secret-string  "secretsmanagerpassword"
+
+# Step 171, Lambda code
+const aws = require('aws-sdk');
+
+const kmsSecret = process.env.KMS_SECRET;
+const ssmSecret = process.env.SSM_SECRET;
+const userId =  process.env.SM_USER_ID;
+
+let decodedSecret;
+let DecodedKMSSecret;
+
+const kms = new aws.KMS();
+const ssm = new aws.SSM();
+const sm = new aws.SecretsManager();
+
+exports.handler = async message => {
+    console.log(message);
+    let secretType = message.pathParameters.id
+    console.log("Secret Type:", secretType);
+
+    if(secretType == 'kms')
+        decodedSecret = await decodeKMSSecret();
+    else if (secretType == 'ssm')
+        decodedSecret = await decodeSSMSecret();
+    else if (secretType == 'sm') {
+        var password = await decodeSMSecret(userId);
+        decodedSecret = "Password is: " + password;
+    }
+    else
+        decodedSecret = "Provide a valid secret type (kms, ssm, or sm (secrets manager))";
+
+    console.log(decodedSecret);
+    const response = {
+        statusCode: 200,
+        headers: {},
+        body: JSON.stringify('Plain text secret(s): ' + decodedSecret)
+    };
+    return response;
+};
+
+async function decodeKMSSecret() {
+    if (DecodedKMSSecret) {
+        return DecodedKMSSecret;
+    }
+    const params = {
+      CiphertextBlob: Buffer.from(kmsSecret, 'base64')
+    };
+    const data = await kms.decrypt(params).promise();
+    DecodedKMSSecret = data.Plaintext.toString('utf-8');
+    return DecodedKMSSecret;
+}
+
+async function decodeSSMSecret() {
+    const params = {
+        Name: ssmSecret,
+        WithDecryption: true
+    };
+    const result = await ssm.getParameter(params).promise();
+    return result.Parameter.Value
+}
+
+async function decodeSMSecret(smkey) {
+    console.log("SM Key:", smkey);
+    const params = {
+        SecretId: smkey
+    };
+    const result = await sm.getSecretValue(params).promise();
+    return result.SecretString;
+}
+
+
+###################### Working Lab Notes
+
+API URL 
+https://rgomla5921.execute-api.us-west-2.amazonaws.com/dev
+
+curl https://rgomla5921.execute-api.us-west-2.amazonaws.com/dev/bookmarks/0d355ed7-9625-414f-aff6-35820fccfe45
+
+162.229.208.15
+
+aws kms encrypt --plaintext "Key Management Service Secrets" \
+                --query CiphertextBlob \
+                --output text \
+                --key-id 9cc2c56e-c05f-4560-bc88-bb2c400a2090
+
+AQICAHhYiLrg+SL1wf8sTfx7WJK2aD+ZnjTdE/+liQ2ZMtrICgGPcm6tISlnBfHksNqDQ3adAAAAfDB6BgkqhkiG9w0BBwagbTBrAgEAMGYGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMP97IBFphhjb9CoC5AgEQgDnmNmu7jBfDXYErulHZRc8mmWS0r6kd2BAp01Jo7dzbWArFUolF+cCzBRzGvsyzJyJIiU6OaHpvpKE=
+
+https://rgomla5921.execute-api.us-west-2.amazonaws.com/dev/secrets/kms

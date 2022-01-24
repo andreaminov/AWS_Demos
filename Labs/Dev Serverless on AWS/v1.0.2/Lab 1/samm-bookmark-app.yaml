@@ -1,0 +1,379 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+Description: Bookmarks - A simple Serverless App using AWS SAM
+Resources:
+  api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name:
+        Fn::Sub:
+        - Bookmark App
+        - ResourceName: /bookmarks
+      StageName:
+        Ref: APIGatewayStageName
+      Cors:
+        AllowMethods: '''POST, GET, DELETE, PUT'''
+        AllowHeaders: '''*'''
+        AllowOrigin: '''*'''
+      DefinitionBody:
+        swagger: '2.0'
+        info: {}
+        paths:
+          /bookmarks:
+            get:
+              description: list bookmarks
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: Successfully retrieved all bookmarks!!
+                  schema:
+                    $ref: '#/definitions/Bookmarks'
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${listBookmarks.Arn}/invocations
+            post:
+              description: create bookmarks
+              responses:
+                '200':
+                  description: Successfully Added BookMark
+                  schema:
+                    $ref: '#/definitions/Bookmarks'
+                '404':
+                  description: bookmark not found
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${createBookmark.Arn}/invocations
+          /bookmarks/{id}:
+            get:
+              description: create a bookmark
+              parameters:
+              - name: id
+                in: path
+                required: true
+                type: string
+              responses:
+                '200':
+                  description: Successfully added a bookmark
+                '404':
+                  description: bookmark not found
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${getBookmark.Arn}/invocations
+            put:
+              description: update a bookmark
+              parameters:
+              - name: id
+                in: path
+                required: true
+                type: string
+              responses:
+                '200':
+                  description: Successfully updated a bookmark
+                '404':
+                  description: Could not update the bookmark
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${updateBookmark.Arn}/invocations
+            delete:
+              description: delete a bookmark
+              parameters:
+              - name: id
+                in: path
+                required: true
+                type: string
+              responses:
+                '200':
+                  description: Successfully deleted a bookmark
+                '404':
+                  description: Could not delete a bookmark
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${deleteBookmark.Arn}/invocations
+            options:
+              description: update a bookmark
+              parameters:
+              - name: id
+                in: path
+                required: true
+                type: string
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Headers:
+                      type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: '''POST,
+                        GET, DELETE, PUT'''
+                      method.response.header.Access-Control-Allow-Headers: '''*'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}
+
+                        '
+                requestTemplates:
+                  application/json: "{\n  \"statusCode\" : 200\n}\n"
+                passthroughBehavior: when_no_match
+                type: mock
+        definitions:
+          Bookmarks:
+            type: object
+            properties:
+              id:
+                type: string
+              url:
+                type: string
+              name:
+                type: string
+      EndpointConfiguration: REGIONAL
+    Metadata:
+      FinTag: /bookmarks
+  getBookmark:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-getBookmark
+      Description:
+        Fn::Sub:
+        - ${ResourceName} Function
+        - ResourceName: getBookmark
+      CodeUri: s3://qls-4260037-b6bd9fb5ab9f3d3e-bookmarkbucket-1j3y34143l0sz/sam-app/df920b91f8b1f579d7177a2a34e10d37
+      Handler: index.handler
+      Runtime: nodejs12.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Role:
+        Ref: SamDeploymentRole
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: bookmarksTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: bookmarksTable
+          TABLE_ARN:
+            Fn::GetAtt:
+            - bookmarksTable
+            - Arn
+      Events:
+        apiGET:
+          Type: Api
+          Properties:
+            Path: /bookmarks/{id}
+            Method: GET
+            RestApiId:
+              Ref: api
+    Metadata:
+      FinTag: getBookmark
+  updateBookmark:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-updateBookmark
+      Description:
+        Fn::Sub:
+        - ${ResourceName} Function
+        - ResourceName: updateBookmark
+      CodeUri: s3://qls-4260037-b6bd9fb5ab9f3d3e-bookmarkbucket-1j3y34143l0sz/sam-app/1dddd27e0357c0fa2e77a1491b526e8b
+      Handler: index.handler
+      Runtime: nodejs12.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Role:
+        Ref: SamDeploymentRole
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: bookmarksTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: bookmarksTable
+          TABLE_ARN:
+            Fn::GetAtt:
+            - bookmarksTable
+            - Arn
+      Events:
+        apiPUT:
+          Type: Api
+          Properties:
+            Path: /bookmarks/{id}
+            Method: PUT
+            RestApiId:
+              Ref: api
+    Metadata:
+      FinTag: updateBookmark
+  createBookmark:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-createBookmark
+      Description:
+        Fn::Sub:
+        - ${ResourceName} Function
+        - ResourceName: createBookmark
+      CodeUri: s3://qls-4260037-b6bd9fb5ab9f3d3e-bookmarkbucket-1j3y34143l0sz/sam-app/6774c0155ca8438be33a83fc19d381de
+      Handler: index.handler
+      Runtime: nodejs12.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Role:
+        Ref: SamDeploymentRole
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: bookmarksTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: bookmarksTable
+          TABLE_ARN:
+            Fn::GetAtt:
+            - bookmarksTable
+            - Arn
+      Events:
+        apiPOST:
+          Type: Api
+          Properties:
+            Path: /bookmarks
+            Method: POST
+            RestApiId:
+              Ref: api
+    Metadata:
+      FinTag: createBookmark
+  deleteBookmark:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-deleteBookmark
+      Description:
+        Fn::Sub:
+        - ${ResourceName} Function
+        - ResourceName: deleteBookmark
+      CodeUri: s3://qls-4260037-b6bd9fb5ab9f3d3e-bookmarkbucket-1j3y34143l0sz/sam-app/1938436dde2cbb9d8ef4ec587e75706a
+      Handler: index.handler
+      Runtime: nodejs12.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Role:
+        Ref: SamDeploymentRole
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: bookmarksTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: bookmarksTable
+          TABLE_ARN:
+            Fn::GetAtt:
+            - bookmarksTable
+            - Arn
+      Events:
+        apiDELETE:
+          Type: Api
+          Properties:
+            Path: /bookmarks/{id}
+            Method: DELETE
+            RestApiId:
+              Ref: api
+    Metadata:
+      FinTag: deleteBookmark
+  listBookmarks:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-listBookmarks
+      Description:
+        Fn::Sub:
+        - ${ResourceName} Function
+        - ResourceName: listBookmarks
+      CodeUri: s3://qls-4260037-b6bd9fb5ab9f3d3e-bookmarkbucket-1j3y34143l0sz/sam-app/16f7e1a1ceff3f19ac7132d8a59bd80b
+      Handler: index.handler
+      Runtime: nodejs12.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Role:
+        Ref: SamDeploymentRole
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: bookmarksTable
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: bookmarksTable
+          TABLE_ARN:
+            Fn::GetAtt:
+            - bookmarksTable
+            - Arn
+      Events:
+        apiGETAll:
+          Type: Api
+          Properties:
+            Path: /bookmarks
+            Method: GET
+            RestApiId:
+              Ref: api
+    Metadata:
+      FinTag: listBookmarks
+  bookmarksTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName:
+        Fn::Sub: ${AWS::StackName}-bookmarksTable
+    Metadata:
+      FinTag: Bookmarks
+Parameters:
+  StackName:
+    Type: String
+    Description: Stack Name (injected at deployment time)
+  APIGatewayStageName:
+    Type: String
+    Description: Environment name used for API Gateway Stage names
+  SamDeploymentRole:
+    Type: String
+    Description: Role used for Sam deployment

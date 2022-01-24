@@ -1,0 +1,292 @@
+# Step 7, download and setup app in Cloud9
+wget https://us-west-2-tcprod.s3-us-west-2.amazonaws.com/courses/ILT-TF-200-SVDVSS/v1.0.2/lab-6-CICD/scripts/app-code.zip
+unzip app-code.zip
+cd app-code
+
+# Step 13, create CodeCommit repository
+aws codecommit create-repository --repository-name app-code
+
+# Step 15, setting git configs
+git config --global credential.helper '!aws codecommit credential-helper $@'
+git config --global credential.UseHttpPath true
+
+# Step 16, Initial Commit 
+cd ~/environment/app-code
+git init
+git checkout -b main
+git add .
+git commit -m "Initial commit"
+
+# Step 17, Adds CodeCommit repository URL to local git project
+git remote add origin (REPLACE_WITH_HTTP_CLONE_URL)
+
+# Step 18 push code to CodeCommit
+git push -u origin main
+
+# Step 21, Uninstall older version of AWS CDK and install latest version
+npm uninstall -g aws-cdk
+npm install -g aws-cdk --force
+
+# Step 22 create a folder in the app-code directory
+cd ~/environment/app-code
+mkdir pipeline
+cd pipeline
+
+# Step 23, initialize CDK project
+cdk init --language typescript
+
+# Step 24, install CDK modules
+npm install --save @aws-cdk/aws-codedeploy @aws-cdk/aws-codebuild
+npm install --save @aws-cdk/aws-codecommit @aws-cdk/aws-codepipeline-actions
+npm install --save @aws-cdk/aws-s3
+
+# Step 31, build the CDK projectcd ~/environment/app-code/pipeline
+cd ~/environment/app-code/pipeline
+npm run build
+
+# Step 32, depoy the pipeline project
+cdk deploy
+
+# Step 37, build and deploy the project
+npm run build
+cdk deploy
+
+# Step 40, code
+// Import existing CodeCommit app-code repository
+const codeRepo = codecommit.Repository.fromRepositoryName(
+  this,
+  'AppRepository', // Logical name within CloudFormation
+  'app-code' // Repository name
+);
+
+// Pipeline creation starts
+const pipeline = new codepipeline.Pipeline(this, 'Pipeline', {
+  artifactBucket: artifactsBucket
+});
+
+// Declare source code as an artifact
+const sourceOutput = new codepipeline.Artifact();
+
+// Add source stage to pipeline
+pipeline.addStage({
+  stageName: 'Source',
+  actions: [
+    new codepipeline_actions.CodeCommitSourceAction({
+      actionName: 'CodeCommit_Source',
+      repository: codeRepo,
+      output: sourceOutput,
+      branch: 'main',
+    }),
+  ],
+});
+
+# Step 42, code
+// Declare build output as artifacts
+const buildOutput = new codepipeline.Artifact();
+
+// Declare a new CodeBuild project
+const buildProject = new codebuild.PipelineProject(this, 'Build', {
+  environment: { buildImage: codebuild.LinuxBuildImage.AMAZON_LINUX_2_2 },
+  environmentVariables: {
+    'PACKAGE_BUCKET': {
+      value: artifactsBucket.bucketName
+    }
+  }
+});
+
+// Add the build stage to our pipeline
+pipeline.addStage({
+  stageName: 'Build',
+  actions: [
+    new codepipeline_actions.CodeBuildAction({
+      actionName: 'Build',
+      project: buildProject,
+      input: sourceOutput,
+      outputs: [buildOutput],
+    }),
+  ],
+});
+
+# Step 44, rebuild 
+npm run build
+cdk deploy
+
+# Step 49, bildspec file code
+# ~/environment/app-code/buildspec.yml
+
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 12
+    commands:
+      # Install packages or any pre-reqs in this phase.
+      # Upgrading SAM CLI to latest version
+      - pip3 install --upgrade aws-sam-cli
+      - sam --version
+
+  build:
+    commands:
+      # Use Build phase to build your artifacts (compile, etc.)
+      - cd backend
+      - sam build
+
+  post_build:
+    commands:
+      # Use Post-Build for notifications, git tags, upload artifacts to S3
+      - cd ..
+      - sam package --template backend/template.yaml --s3-bucket $PACKAGE_BUCKET --output-template-file packaged.yaml
+
+artifacts:
+  discard-paths: yes
+  files:
+    # List of local artifacts that will be passed down the pipeline
+    - packaged.yaml
+
+# Step 51 Commit changs to repository
+cd ~/environment/app-code
+git add .
+git commit -m "Added buildspec.yml"
+git push
+
+# Step 52, code
+// Deploy stage
+pipeline.addStage({
+  stageName: 'Dev',
+  actions: [
+    new codepipeline_actions.CloudFormationCreateReplaceChangeSetAction({
+      actionName: 'CreateChangeSet',
+      templatePath: buildOutput.atPath("packaged.yaml"),
+      stackName: 'bookmark-app',
+      adminPermissions: true,
+      changeSetName: 'bookmark-app-dev-changeset',
+      runOrder: 1
+    }),
+    new codepipeline_actions.CloudFormationExecuteChangeSetAction({
+      actionName: 'Deploy',
+      stackName: 'bookmark-app',
+      changeSetName: 'bookmark-app-dev-changeset',
+      runOrder: 2
+    }),
+  ],
+});
+
+# Step 54, update and deploy app
+cd ~/environment/app-code/pipeline
+npm run build
+cdk deploy
+
+# Step 72, install and run Artillery
+cd ../test
+npm install artillery -g
+npm install faker
+artillery run simple-post.yaml
+
+# Step 79, curl commands
+curl (InvokeURL)/bookmarks/(id)
+
+# Step 83, update index.js file
+  return {
+    statusCode: 200,
+    headers: {},
+    body: JSON.stringify([('Successfully retrieved bookmark '),results.Item])
+  };
+
+# Step 85, check changes made
+cd ~/environment/app-code
+git add .
+git commit -m "updated getBookmark function"
+git push
+
+# Step 92, Update template.yaml
+cd ~/environment/app-code
+git add .
+git commit -m "updated getBookmark function"
+git push
+
+# Step 94, validate SAM template
+cd ~/environment/app-code/backend
+sam validate
+
+# Step 95, push changes
+cd ~/environment/app-code
+git add .
+git commit -m "Canary deployments with SAM"
+git push
+
+# Step 96, template.yaml file update
+CanaryErrorsAlarm:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    AlarmDescription: Lambda function canary errors
+    ComparisonOperator: GreaterThanThreshold
+    EvaluationPeriods: 2
+    MetricName: Errors
+    Namespace: AWS/Lambda
+    Period: 60
+    Statistic: Sum
+    Threshold: 0
+    Dimensions:
+      - Name: Resource
+        Value: !Sub "${AWS::StackName}-getBookmark:live"
+      - Name: FunctionName
+        Value: !Ref getBookmark
+      - Name: ExecutedVersion
+        Value: !GetAtt getBookmark.Version.Version
+
+# Step 97, template.yaml update
+Alarms:
+  - !Ref CanaryErrorsAlarm
+
+# Step 99, update line n template.yaml file
+uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${getBookmark.Arn}:live/invocations
+
+# Step 101, validate SAM template
+cd ~/environment/app-code/backend
+sam validate
+
+# Step 103, update to return in index.js file
+  return {
+    statusCode: 200,
+    headers: {},
+    body: JSON.stringify(['Successfully retrieved bookmark using the new version' , results.Item])
+  };
+
+# Step 105, push changes
+cd ~/environment/app-code
+git add .
+git commit -m "Added CloudWatch alarm to monitor the canary"
+git push
+
+# Step 109, update code with curl commands
+counter=1
+while [ $counter -le 120 ]
+do
+    curl (InvokeURL)/bookmarks/(id)
+    sleep 1
+    ((counter++))
+    printf "\n"
+done
+
+
+
+
+#################### Working Lab Notes
+
+https://git-codecommit.us-west-2.amazonaws.com/v1/repos/app-code
+
+git remote add origin https://git-codecommit.us-west-2.amazonaws.com/v1/repos/app-code
+
+https://f72wwpqpt7.execute-api.us-west-2.amazonaws.com/dev
+
+curl https://f72wwpqpt7.execute-api.us-west-2.amazonaws.com/dev/bookmarks/1274cf8b-d1ce-43f0-b7f7-2ed303d21f81
+
+
+counter=1
+while [ $counter -le 120 ]
+do
+    curl curl https://f72wwpqpt7.execute-api.us-west-2.amazonaws.com/dev/bookmarks/1274cf8b-d1ce-43f0-b7f7-2ed303d21f81
+    sleep 1
+    ((counter++))
+    printf "\n"
+done
