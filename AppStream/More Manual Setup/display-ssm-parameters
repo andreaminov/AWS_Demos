@@ -1,0 +1,3 @@
+#!/bin/bash
+
+aws --profile blue-cli-east ssm describe-parameters --output table

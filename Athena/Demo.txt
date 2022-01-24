@@ -1,0 +1,43 @@
+###1st setup VPC flow log on an ENI being sent to S3
+
+
+###Create the Athena Database
+create database athenavpcflologs
+
+###Create a table in the database
+CREATE EXTERNAL TABLE IF NOT EXISTS flowlogz123 (
+  version int,
+  account string,
+  interface string,
+  sourceaddr string,
+  destinationaddress string,
+  sourcport int,
+  destinationport int,
+  protocol int,
+  numpackets int,
+  numbytes bigint,
+  starttime int,
+  endtime int,
+  action string,
+  logstatus string
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ' '
+LOCATION 's3://normathenademo/AWSLogs/093086341349/vpcflowlogs/us-east-1/2020/06/23/'
+TBLPROPERTIES ("skip.header.line.count"="1");
+
+###Query all data in the table
+SELECT * FROM "athenavpcflologs"."flowlogz123" limit 10;
+
+###Query selected information from the table
+SELECT SUM(numpackets) AS numpackets,
+  destinationaddress
+FROM flowlogz123
+WHERE destinationport = 443
+GROUP BY destinationaddress
+ORDER BY numpackets DESC LIMIT 10;
+
+###Create a PARTITION
+ALTER TABLE flowlogz
+ADD PARTITION (dt='YYYY-MM-DD')
+location 's3://normathenademo/AWSLogs/093086341349/vpcflowlogs/us-east-1/YYYY/MM/dd';

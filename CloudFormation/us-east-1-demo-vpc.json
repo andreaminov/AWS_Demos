@@ -1,0 +1,420 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Deploys the network stack for DemoVPC_s.",
+
+    "Metadata": {
+
+    },
+
+    "Parameters": {
+    
+    },
+
+    "Mappings": {
+
+    },
+
+    "Conditions": {
+
+    },
+
+    "Resources": {
+        
+        "DemoVPC": {
+          "Type": "AWS::EC2::VPC",
+          "Properties": {
+            "CidrBlock": "10.1.0.0/16",
+            "Tags":[ { "Key": "Name", "Value":  "DemoVPC" }, {"Key" : "DemoVPC_", "Value" : "DemoVPC"}]
+          }
+        },
+
+        "DemoVPCIGW": {
+          "Type": "AWS::EC2::InternetGateway",
+          "Properties": {
+            "Tags": [{ "Key": "Name", "Value":  "DemoVPC_IGW" }, {"Key" : "DemoVPC_", "Value" : "DemoVPC_IGW"}]
+          }
+        },
+
+        "AttachGateway": {
+          "Type": "AWS::EC2::VPCGatewayAttachment",
+          "Properties": {
+            "VpcId": { "Ref": "DemoVPC" },
+            "InternetGatewayId": { "Ref": "DemoVPCIGW" }
+          }
+        },
+        
+        "Public1a": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.11.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Public_1a"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Public1b": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.12.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Public_1b"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Public1c": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.13.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Public_1c"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Public1d": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.14.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Public_1d"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Public1e": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.15.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Public_1e"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Public1f": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.16.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Public_1f"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Private1a": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.21.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Private_1a"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+          
+        "Private1b": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.22.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Private_1b"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Private1c": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.23.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Public_1c"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Private1d": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.24.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Private_1d"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Private1e": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.25.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Private_1e"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+        
+        "Private1f": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "DemoVPC" },
+            "CidrBlock": "10.1.26.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Private_1f"},{"Key" : "DemoVPC_", "Value" : "DemoVPC_Subnet"}]
+          }
+        },
+
+        "PublicRT": {
+          "Type": "AWS::EC2::RouteTable",
+          "Properties": {
+            "VpcId": { "Ref": "DemoVPC" },
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Public_RT"}, {"Key" : "DemoVPC_", "Value" : "DemoVPC_Route_Table"}]
+          }
+        },
+        
+        "PrivateRT": {
+          "Type": "AWS::EC2::RouteTable",
+          "Properties": {
+            "VpcId": { "Ref": "DemoVPC" },
+            "Tags": [{"Key" : "Name", "Value" : "DemoVPC_Private_RT"}, {"Key" : "DemoVPC_", "Value" : "DemoVPC_Route_Table"}]
+          }
+        },
+        
+        "NATGW" : {
+          "Type" : "AWS::EC2::NatGateway",
+          "Properties" : {
+              "AllocationId" : { "Fn::GetAtt" : ["EIP", "AllocationId"]},
+              "SubnetId" : { "Ref" : "Public1a"},
+              "Tags" : [ {"Key" : "Name", "Value" : "DemoVPC_NAT_Gateway" },{"Key" : "DemoVPC_", "Value" : "DemoVPC_NATGW"}]
+            }
+        },
+
+        "EIP" : {
+          "DependsOn" : "AttachGateway",
+          "Type" : "AWS::EC2::EIP",
+          "Properties" : {
+              "Domain" : "vpc",
+              "Tags":[ {"Key": "Name", "Value":  "DemoVPC_Elastic_IP"}, {"Key": "DemoVPC_", "Value" : "DemoVPC_EIP"}]
+          }
+        },
+
+        "PrivateRoute" : {
+          "Type" : "AWS::EC2::Route",
+          "Properties" : {
+              "RouteTableId" : { "Ref" : "PrivateRT" },
+              "DestinationCidrBlock" : "0.0.0.0/0",
+              "NatGatewayId" : { "Ref" : "NATGW" }
+          }
+        },
+        
+        "PublicRoute": {
+          "Type": "AWS::EC2::Route",
+          "Properties": {
+            "RouteTableId": { "Ref": "PublicRT" },
+            "DestinationCidrBlock": "0.0.0.0/0",
+            "GatewayId": { "Ref": "DemoVPCIGW" }
+          }
+        },
+        
+        "PrivateRTAssociation1a": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1a"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1b": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1b"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1c": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1c"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1d": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1d"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1e": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1e"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1f": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1f"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PublicRTAssociation1a": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1a"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1b": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1b"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1c": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1c"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1d": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1d"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1e": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1e"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1f": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1f"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        }
+      },
+
+    "Outputs": {
+      "VPCId" : {
+        "Description" : "VPCID of the newly created VPC",
+        "Value" :  { "Ref" : "DemoVPC" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-VPCID" }
+        }
+      },
+
+      "Private1a" : {
+        "Description" : "Private Subnet in AZ 1a",
+        "Value" :  { "Ref" : "Private1a" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1a" }
+        }
+      },
+
+      "Private1b" : {
+        "Description" : "Private Subnet in AZ 1b",
+        "Value" :  { "Ref" : "Private1b" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1b" }
+        }
+      },
+
+      "Private1c" : {
+        "Description" : "Private Subnet in AZ 1c",
+        "Value" :  { "Ref" : "Private1c" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1c" }
+        }
+      },
+
+      "Private1d" : {
+        "Description" : "Private Subnet in AZ 1d",
+        "Value" :  { "Ref" : "Private1d" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1d" }
+        }
+      },
+
+      "Private1e" : {
+        "Description" : "Private Subnet in AZ 1e",
+        "Value" :  { "Ref" : "Private1e" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1e" }
+        }
+      },
+
+      "Private1f" : {
+        "Description" : "Private Subnet in AZ 1f",
+        "Value" :  { "Ref" : "Private1f" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1f" }
+        }
+      },
+
+      "Public1a" : {
+        "Description" : "Public Subnet in AZ 1a",
+        "Value" :  { "Ref" : "Public1a" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1a" }
+        }
+      },
+
+      "Public1b" : {
+        "Description" : "Public Subnet in AZ 1b",
+        "Value" :  { "Ref" : "Public1b" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1b" }
+        }
+      },
+
+      "Public1c" : {
+        "Description" : "Public Subnet in AZ 1c",
+        "Value" :  { "Ref" : "Public1c" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1c" }
+        }
+      },
+
+      "Public1d" : {
+        "Description" : "Public Subnet in AZ 1d",
+        "Value" :  { "Ref" : "Public1d" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1d" }
+        }
+      },
+
+      "Public1e" : {
+        "Description" : "Public Subnet in AZ 1e",
+        "Value" :  { "Ref" : "Public1e" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1e" }
+        }
+      },
+
+      "Public1f" : {
+        "Description" : "Public Subnet in AZ 1f",
+        "Value" :  { "Ref" : "Public1f" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1f" }
+        }
+      }
+    }
+}

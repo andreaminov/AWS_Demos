@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+##################
+# Date:  4/20/2020
+# Author:  Harold Ratcliff
+# Used to setup VPC, One Public subnet, and Two Private Subnets, IGW, NAT
+# to be used to launch Appstream Image Builder OR deploy a final Appstream
+# image to production.  Uses SSM Parameter Store to retrieve values from
+# to ensure this environment does not overlap with existing demo(s) in your
+# account.  Information is written to Parameter Store using bash script=setup-ssm-for-appstream.
+##################
+# This template creates:
+#   VPC
+#   Internet Gateway
+#   Public Route Table
+#   Public Subnet
+#   Security Group
+#   NAT Gateway
+
+
+Parameters: 
+  MyVPCcidr: 
+    Description:  Appstream2 CIDR block
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: MyVPCcidr
+  MyPubSub1: 
+    Description:  Appstream2 Public Subnet 1 CIDR block
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: MyPubSub1
+  MyPrivSub1: 
+    Description:  Appstream2 Private Subnet 1 CIDR block
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: MyPrivSub1
+  MyPrivSub2: 
+    Description:  Appstream2 Private Subnet 2 CIDR block
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: MyPrivSub2
+      
+Resources:
+  AppStreamDemoVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref MyVPCcidr
+      Tags: 
+        - 
+          Key: Name
+          Value: AppStream2 VPC
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref AppStreamDemoVPC
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", "a"] ]
+      CidrBlock: !Ref MyPubSub1
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - 
+          Key: Name
+          Value: AppStream2 PubSub1
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref AppStreamDemoVPC
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", "a"] ]
+      CidrBlock: !Ref MyPrivSub1
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - 
+          Key: Name
+          Value: AppStream2 PrivSub1
+  PrivateSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref AppStreamDemoVPC
+      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", "b"] ]
+      CidrBlock: !Ref MyPrivSub2
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - 
+          Key: Name
+          Value: AppStream2 PrivSub2
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Network
+          Value: Public
+  GatewayToInternet:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref AppStreamDemoVPC
+      InternetGatewayId: !Ref InternetGateway
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref AppStreamDemoVPC
+      Tags:
+        - Key: Network
+          Value: Public
+        - Key: Name
+          Value: AppStream2 Public Route Table
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+  NatGateway:
+    Type: 'AWS::EC2::NatGateway'
+    DependsOn: NatPublicIP
+    Properties:
+      AllocationId: !GetAtt NatPublicIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+  NatPublicIP:
+    Type: 'AWS::EC2::EIP'
+    DependsOn: AppStreamDemoVPC
+    Properties:
+      Domain: vpc
+  PrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref AppStreamDemoVPC
+      Tags:
+        - Key: Network
+          Value: Private
+        - Key: Name
+          Value: AppStream2 Private Route Table
+  PrivateRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+  PrivateSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+  # Added the Security Group as a CF Stack change
+  SecurityGroupFleet:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref AppStreamDemoVPC
+      GroupName: "SG-Appstream2-fleet"
+      GroupDescription: Security Group for Appstream2 fleet
+      SecurityGroupIngress:
+          IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+             
+###########
+# Share the outputs from this stack with Appstream "Stack" creation template
+###########
+
+Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref AppStreamDemoVPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPCID'
+  PrivateSubnet1:
+    Description: The subnet ID to use for private servers
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-MyPrivSub1ID'
+  PrivateSubnet2:
+    Description: The second subnet ID to use for private servers
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-MyPrivSub2ID'
+  SGfleetID:
+    Description: The SG ID used for fleet
+    Value: !Ref SecurityGroupFleet
+    Export:
+      Name: !Sub '${AWS::StackName}-SGfleetID'
+  NetworkStackName:
+    Description:  The name of this stack
+    Value: !Sub '${AWS::StackName}'
+ 

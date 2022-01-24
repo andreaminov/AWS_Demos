@@ -1,0 +1,29 @@
+#!/bin/bash -v
+#
+# Use this to set AWS Systems Manager - Parameter Store values for AppStream2 environment setup
+#
+
+# Change these to reflect how you want setup in your account.  Also note to change
+# the account number in MyFleetImage as well.
+#
+MyUserProfile="orange-cli-east"
+
+MyVPCcidr="10.255.0.0/16"
+MyPubSub1="10.255.0.0/24"
+MyPrivSub1="10.255.1.0/24"
+MyPrivSub2="10.255.2.0/24"
+#MyFleetImage="arn:aws:appstream:us-east-1:093086341349:image/BaseImage-20200528v3"
+MyFleetImage="arn:aws:appstream:us-east-1:093086341349:image/BaseImage-20200528v3"
+
+# These will overwrite if exist, or create if not there already.
+aws --profile $MyUserProfile ssm put-parameter --name MyVPCcidr --description "VPC /CIDR block to use for setting up Appstream2 environment" --value $MyVPCcidr --type String --overwrite
+
+aws --profile $MyUserProfile ssm put-parameter --name MyPubSub1 --description "Public subnet /CIDR block to use for setting up Appstream2 environment" --value $MyPubSub1 --type String --overwrite
+
+aws --profile $MyUserProfile ssm put-parameter --name MyPrivSub1 --description "Private subnet #1 /CIDR block to use for setting up Appstream2 environment" --value $MyPrivSub1 --type String --overwrite
+
+aws --profile $MyUserProfile ssm put-parameter --name MyPrivSub2 --description "Private subnet #2 /CIDR block to use for setting up Appstream2 environment" --value $MyPrivSub2 --type String --overwrite
+
+aws --profile $MyUserProfile ssm put-parameter --name MyFleetImage --description "Appstream image created with Firefox, Chrome, Putty, Puttygen, Notepad+" --value $MyFleetImage --type String --overwrite
+
+exit

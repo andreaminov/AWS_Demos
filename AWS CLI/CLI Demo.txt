@@ -1,0 +1,20 @@
+#Translate 
+aws translate translate-text --region us-east-1 --source-language-code "en" --target-language-code "es" --text "hello, world"
+
+##Find service limits
+aws service-quotas list-service-quotas --service-code vpc
+
+#Translate text to another language
+aws translate translate-text --text "Hello, welcome to AWS cloud practitioner essentials" --source-language-code=en --target-language=es
+ 
+#Create audio from text
+aws polly synthesize-speech --output-format mp3 --voice-id Joanna --text 'Hello, my name is Norm. Welcome to Cloud Practitioner Essentials' ~/Downloads/hello.mp3
+ 
+#Play audio file on a mac from command line
+afplay ~/Downloads/hello.mp3
+
+#List S3 buckets
+aws s3 ls
+
+#Deploy CloudFormation Stack
+aws cloudformation deploy --template-file us-east-1-network.json --stack-name Network-Demo

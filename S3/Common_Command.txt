@@ -1,0 +1,2 @@
+#To create a pre-signed URL with a custom lifetime (in seconds) that links to an object in an S3 bucket
+aws s3 presign <OBJECT NAME> --expires-in 432000

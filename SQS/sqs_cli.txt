@@ -1,0 +1,11 @@
+#Get messages via short polling
+aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/093086341349/demo_standard_queue
+aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/093086341349/demo_fifo_queue.fifo
+
+#Get messages via long polling
+aws sqs receive-message --queue-url	https://sqs.us-east-1.amazonaws.com/093086341349/demo_standard_queue --wait-time-seconds 20
+aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/093086341349/demo_fifo_queue.fifo --wait-time-seconds 20
+
+#Remove message from queue
+aws sqs delete-message --queue-url https://sqs.us-east-1.amazonaws.com/093086341349/demo_standard_queue --receipt-handle <value>
+aws sqs delete-message --queue-url https://sqs.us-east-1.amazonaws.com/093086341349/demo_fifo_queue.fifo --receipt-handle 

@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+##################
+# Date:  5/11/2020
+# Author:  Harold Ratcliff
+# Uses previously defined Fleet.
+##################
+# This template creates:
+#   A stack to start streaming applications
+# to users. A stack consists of an associated # fleet, user access policies, # and storage configurations
+# (optional) Keep this:   resourceIdentifier: "appstream2-36fb080bb8-us-east-1-167789893593"
+
+Parameters: 
+  AppstreamStackName:
+    Description: >-
+      Name to provide your stack that will be used to stream applications to users.  It consists of the fleet, user access policies, and storage configurations.
+      
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: '^[a-zA-Z][-a-zA-Z0-9]*$'
+    Default: "Appstream-Stack-v3-2020"
+
+Resources:
+    AppStreamStack:
+        Type: "AWS::AppStream::Stack"
+        Properties:
+            Name: !Ref AppstreamStackName
+            DisplayName: !Ref AppstreamStackName
+            Description: "Use to deploy for training classes"
+            StorageConnectors: 
+              - 
+                ConnectorType: "HOMEFOLDERS"
+              
+            UserSettings: 
+              - 
+                Action: "PRINTING_TO_LOCAL_DEVICE"
+                Permission: "ENABLED"
+              - 
+                Action: "CLIPBOARD_COPY_FROM_LOCAL_DEVICE"
+                Permission: "ENABLED"
+              - 
+                Action: "CLIPBOARD_COPY_TO_LOCAL_DEVICE"
+                Permission: "ENABLED"
+              - 
+                Action: "FILE_UPLOAD"
+                Permission: "ENABLED"
+              - 
+                Action: "FILE_DOWNLOAD"
+                Permission: "ENABLED"
+            ApplicationSettings: 
+                Enabled: true
+                SettingsGroup: !Ref AppstreamStackName

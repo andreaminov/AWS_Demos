@@ -1,0 +1,488 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Deploys an AppStream deployment in a new VPC.",
+
+    "Metadata": {
+
+    },
+
+    "Parameters": {
+        
+    },
+
+    "Mappings": {
+
+    },
+
+    "Conditions": {
+
+    },
+
+    "Resources": {
+        
+        "AppStreamVPC": {
+          "Type": "AWS::EC2::VPC",
+          "Properties": {
+            "CidrBlock": "10.255.0.0/16",
+            "Tags":[ { "Key": "Name", "Value":  "AppStreamVPC" }, {"Key" : "AppStreamVPC", "Value" : "AppStreamVPC"}]
+          }
+        },
+
+        "AppStreamVPCIGW": {
+          "Type": "AWS::EC2::InternetGateway",
+          "Properties": {
+            "Tags": [{ "Key": "Name", "Value":  "AppStreamVPC_IGW" }, {"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_IGW"}]
+          }
+        },
+
+        "AttachGateway": {
+          "Type": "AWS::EC2::VPCGatewayAttachment",
+          "Properties": {
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "InternetGatewayId": { "Ref": "AppStreamVPCIGW" }
+          }
+        },
+        
+        "Public1a": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.11.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Public_1a"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Public1b": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.12.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Public_1b"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Public1c": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.13.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Public_1c"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Public1d": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.14.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Public_1d"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Public1e": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.15.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Public_1e"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Public1f": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.16.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Public_1f"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Private1a": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.21.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Private_1a"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+          
+        "Private1b": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.22.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Private_1b"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Private1c": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.23.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Public_1c"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Private1d": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.24.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Private_1d"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Private1e": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.25.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Private_1e"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+        
+        "Private1f": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "CidrBlock": "10.255.26.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Private_1f"},{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Subnet"}]
+          }
+        },
+
+        "PublicRT": {
+          "Type": "AWS::EC2::RouteTable",
+          "Properties": {
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Public_RT"}, {"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Route_Table"}]
+          }
+        },
+        
+        "PrivateRT": {
+          "Type": "AWS::EC2::RouteTable",
+          "Properties": {
+            "VpcId": { "Ref": "AppStreamVPC" },
+            "Tags": [{"Key" : "Name", "Value" : "AppStreamVPC_Private_RT"}, {"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_Route_Table"}]
+          }
+        },
+        
+        "NATGW" : {
+          "Type" : "AWS::EC2::NatGateway",
+          "Properties" : {
+              "AllocationId" : { "Fn::GetAtt" : ["EIP", "AllocationId"]},
+              "SubnetId" : { "Ref" : "Public1a"},
+              "Tags" : [ {"Key" : "Name", "Value" : "AppStreamVPC_NAT_Gateway" },{"Key" : "AppStreamVPC", "Value" : "AppStreamVPC_NATGW"}]
+            }
+        },
+
+        "EIP" : {
+          "DependsOn" : "AttachGateway",
+          "Type" : "AWS::EC2::EIP",
+          "Properties" : {
+              "Domain" : "vpc",
+              "Tags":[ {"Key": "Name", "Value":  "AppStreamVPC_Elastic_IP"}, {"Key": "AppStreamVPC", "Value" : "AppStreamVPC_EIP"}]
+          }
+        },
+
+        "PrivateRoute" : {
+          "Type" : "AWS::EC2::Route",
+          "Properties" : {
+              "RouteTableId" : { "Ref" : "PrivateRT" },
+              "DestinationCidrBlock" : "0.0.0.0/0",
+              "NatGatewayId" : { "Ref" : "NATGW" }
+          }
+        },
+        
+        "PublicRoute": {
+          "Type": "AWS::EC2::Route",
+          "Properties": {
+            "RouteTableId": { "Ref": "PublicRT" },
+            "DestinationCidrBlock": "0.0.0.0/0",
+            "GatewayId": { "Ref": "AppStreamVPCIGW" }
+          }
+        },
+        
+        "PrivateRTAssociation1a": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1a"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1b": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1b"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1c": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1c"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1d": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1d"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1e": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1e"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1f": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Private1f"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PublicRTAssociation1a": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1a"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1b": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1b"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1c": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1c"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1d": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1d"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1e": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1e"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1f": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "Public1f"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+        
+        "AppStreamSecurityGroup" : {
+          "Type" : "AWS::EC2::SecurityGroup",
+          "Properties" : {
+            "GroupDescription" : "Security Group for Appstream2 fleet",
+            "SecurityGroupIngress" : [ 
+                { "IpProtocol" : "tcp", "FromPort" : "0", "ToPort" : "65535", "CidrIp" : "0.0.0.0/0" }
+            ],
+            "VpcId" : { "Ref": "AppStreamVPC" },
+            "Tags" :  [ {"Key": "Name", "Value":  "AppStream_SecurityGroup"}, {"Key": "AppStreamVPC", "Value" : "AppStreamVPC_SG"}]
+          }
+        },
+        
+        "AppStreamFleet" : {
+            "Type" : "AWS::AppStream::Fleet",
+            "Properties" : {
+                "ComputeCapacity" : { "DesiredInstances" : 1 },
+                "Description" : "Fleet of instances supporting applications",
+                "DisconnectTimeoutInSeconds" : 900,
+                "DisplayName" : "Class_Image_v1",
+                "EnableDefaultInternetAccess" : false,
+                "FleetType" : "ALWAYS_ON",
+                "ImageName" : "Class_Image_v1",
+                "InstanceType" : "stream.standard.medium",
+                "MaxUserDurationInSeconds" : 57600,
+                "Name" : "Class_Image_v1",
+                "Tags" : [ {"Key": "Name", "Value" : "AppStream_Fleet"} ],
+                "VpcConfig" : {
+                    "SecurityGroupIds" : [ { "Ref": "AppStreamSecurityGroup" } ],
+                    "SubnetIds" : [
+                        { "Ref": "Private1a"},
+                        { "Ref": "Private1b"},
+                        { "Ref": "Private1c"}
+                    ]
+                }
+              }
+          },
+        
+         "AppStreamStack" : {
+            "Type" : "AWS::AppStream::Stack",
+            "Properties" : {
+                "ApplicationSettings" : {
+                    "Enabled" : true,
+                    "SettingsGroup" :  { "Ref": "AppStreamFleet" } 
+                    },
+                "Description" : "Use to deploy for training classes",
+                "DisplayName" : "Class_Stack",
+                "Name" : "Class_Stack",
+                "StorageConnectors" : [ { "ConnectorType" : "HOMEFOLDERS" } ],
+                "Tags" : [ { "Key": "Name", "Value": "Class_Stack" }, {"Key": "AppStreamVPC", "Value" : "AppStreamVPC_Stack"} ],
+                "UserSettings" : [ 
+                    { "Action" : "CLIPBOARD_COPY_FROM_LOCAL_DEVICE", "Permission" : "ENABLED" },
+                    { "Action" : "CLIPBOARD_COPY_TO_LOCAL_DEVICE", "Permission" : "ENABLED" },
+                    { "Action" : "FILE_DOWNLOAD", "Permission" : "ENABLED" },
+                    { "Action" : "FILE_UPLOAD", "Permission" : "ENABLED" },
+                    { "Action" : "PRINTING_TO_LOCAL_DEVICE", "Permission" : "ENABLED" }
+                   ]
+            }
+        },
+        
+        "StackFleetAssociation" : {
+          "Type" : "AWS::AppStream::StackFleetAssociation",
+          "Properties" : {
+              "FleetName" : { "Ref": "AppStreamFleet" },
+              "StackName" : { "Ref": "AppStreamStack" }
+            }
+        }
+        
+      },
+
+    "Outputs": {
+      "VPCId" : {
+        "Description" : "VPCID of the newly created VPC",
+        "Value" :  { "Ref" : "AppStreamVPC" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-VPCID" }
+        }
+      },
+
+      "Private1a" : {
+        "Description" : "Private Subnet in AZ 1a",
+        "Value" :  { "Ref" : "Private1a" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1a" }
+        }
+      },
+
+      "Private1b" : {
+        "Description" : "Private Subnet in AZ 1b",
+        "Value" :  { "Ref" : "Private1b" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1b" }
+        }
+      },
+
+      "Private1c" : {
+        "Description" : "Private Subnet in AZ 1c",
+        "Value" :  { "Ref" : "Private1c" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1c" }
+        }
+      },
+
+      "Private1d" : {
+        "Description" : "Private Subnet in AZ 1d",
+        "Value" :  { "Ref" : "Private1d" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1d" }
+        }
+      },
+
+      "Private1e" : {
+        "Description" : "Private Subnet in AZ 1e",
+        "Value" :  { "Ref" : "Private1e" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1e" }
+        }
+      },
+
+      "Private1f" : {
+        "Description" : "Private Subnet in AZ 1f",
+        "Value" :  { "Ref" : "Private1f" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Private1f" }
+        }
+      },
+
+      "Public1a" : {
+        "Description" : "Public Subnet in AZ 1a",
+        "Value" :  { "Ref" : "Public1a" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1a" }
+        }
+      },
+
+      "Public1b" : {
+        "Description" : "Public Subnet in AZ 1b",
+        "Value" :  { "Ref" : "Public1b" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1b" }
+        }
+      },
+
+      "Public1c" : {
+        "Description" : "Public Subnet in AZ 1c",
+        "Value" :  { "Ref" : "Public1c" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1c" }
+        }
+      },
+
+      "Public1d" : {
+        "Description" : "Public Subnet in AZ 1d",
+        "Value" :  { "Ref" : "Public1d" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1d" }
+        }
+      },
+
+      "Public1e" : {
+        "Description" : "Public Subnet in AZ 1e",
+        "Value" :  { "Ref" : "Public1e" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1e" }
+        }
+      },
+
+      "Public1f" : {
+        "Description" : "Public Subnet in AZ 1f",
+        "Value" :  { "Ref" : "Public1f" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-Public1f" }
+        }
+      }
+    }
+}

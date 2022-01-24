@@ -1,0 +1,395 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Resources": {
+    "ClayVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "12.0.0.0/16",
+        "InstanceTenancy": "default",
+        "EnableDnsSupport": "true",
+        "EnableDnsHostnames": "false",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "ClayVPC"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "PublicSubnet01": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": "12.0.0.0/24",
+        "AvailabilityZone": "us-east-1a",
+        "VpcId": {
+          "Ref": "ClayVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Public_Subnet01"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "PrivateSubnet01": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": "12.0.1.0/24",
+        "AvailabilityZone": "us-east-1a",
+        "VpcId": {
+          "Ref": "ClayVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Private_Subnet01"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "ProtectedSubnet01": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": "12.0.2.0/24",
+        "AvailabilityZone": "us-east-1a",
+        "VpcId": {
+          "Ref": "ClayVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Protected_Subnet01"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "PublicSubnet02": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": "12.0.3.0/24",
+        "AvailabilityZone": "us-east-1b",
+        "VpcId": {
+          "Ref": "ClayVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Public_Subnet02"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "PrivateSubnet02": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": "12.0.4.0/24",
+        "AvailabilityZone": "us-east-1b",
+        "VpcId": {
+          "Ref": "ClayVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Private_Subnet02"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "ProtectedSubnet02": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": "12.0.5.0/24",
+        "AvailabilityZone": "us-east-1b",
+        "VpcId": {
+          "Ref": "ClayVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Protected_Subnet02"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "IGW01": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Clay_IGW"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "GW1": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {"Ref": "ClayVPC"},
+        "InternetGatewayId": {"Ref": "IGW01"}
+      }
+    },
+    "IGWRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {"Ref": "ClayVPC"},
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "RouteToInternet"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "Route1": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "IGW01",
+      "Properties": {
+        "RouteTableId": {"Ref": "IGWRouteTable"},
+        "DestinationCidrBlock" : "0.0.0.0/0",
+        "GatewayId": {"Ref": "IGW01"}
+      }
+    },
+    "RouteTableAssociationPubSub01": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {"Ref": "PublicSubnet01"},
+        "RouteTableId": {"Ref": "IGWRouteTable"}
+      }
+    },
+    "RouteTableAssociationPubSub02": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {"Ref": "PublicSubnet02"},
+        "RouteTableId": {"Ref": "IGWRouteTable"}
+      }
+    },
+    "EIPForNGW01": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "EIP-NGW01"
+          },
+          {
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          {
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "NGW01": {
+      "Type": "AWS::EC2::NatGateway",
+      "DependsOn": "EIPForNGW01",
+      "Properties": {
+        "AllocationId": {"Fn::GetAtt": ["EIPForNGW01", "AllocationId"]},
+        "SubnetId": {"Ref": "PublicSubnet01"},
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "nat-gateway-us-east-1a"
+          },
+          {
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          {
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "NGWRouteTable01": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {"Ref": "ClayVPC"},
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "RouteToNGWUSEast1a"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "Route2": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "NGW01",
+      "Properties": {
+        "RouteTableId": {"Ref": "NGWRouteTable01"},
+        "DestinationCidrBlock" : "0.0.0.0/0",
+        "NatGatewayId": {"Ref": "NGW01"}
+      }
+    },
+    "RouteTableAssociationPrivSub01": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {"Ref": "PrivateSubnet01"},
+        "RouteTableId": {"Ref": "NGWRouteTable01"}
+      }
+    },
+    "EIPForNGW02": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "EIP-NGW02"
+          },
+          {
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          {
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "NGW02": {
+      "Type": "AWS::EC2::NatGateway",
+      "DependsOn": "EIPForNGW02",
+      "Properties": {
+        "AllocationId": {"Fn::GetAtt": ["EIPForNGW02", "AllocationId"]},
+        "SubnetId": {"Ref": "PublicSubnet02"},
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "nat-gateway-us-east-1b"
+          },
+          {
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          {
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "NGWRouteTable02": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {"Ref": "ClayVPC"},
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "RouteToNGWUSEast1b"
+          },
+          { 
+            "Key": "Env",
+            "Value": "Prod"
+          },
+          { 
+            "Key": "CostCenter",
+            "Value": "IT_Resource"
+          }
+        ]
+      }
+    },
+    "Route3": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "NGW02",
+      "Properties": {
+        "RouteTableId": {"Ref": "NGWRouteTable02"},
+        "DestinationCidrBlock" : "0.0.0.0/0",
+        "NatGatewayId": {"Ref": "NGW02"}
+      }
+    },
+    "RouteTableAssociationPrivSub02": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {"Ref": "PrivateSubnet02"},
+        "RouteTableId": {"Ref": "NGWRouteTable02"}
+      }
+    }
+}
+}

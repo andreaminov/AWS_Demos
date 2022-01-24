@@ -1,0 +1,1 @@
+aws workspaces create-workspaces --cli-input-json file://create-workspaces.json --region us-east-1 --profile euc

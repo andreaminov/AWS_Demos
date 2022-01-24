@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+##################
+# Date:  5/1/2020
+# Author:  Harold Ratcliff
+# Uses previous VPC stack for inputs to setup Appstream2 fleet.
+##################
+# This template creates:
+#   Fleet of instances to stream applications.  Current limit range is 1 to 5.
+
+Parameters: 
+  NetworkStackName:
+    Description: >-
+      Name of an active CloudFormation stack that contains the networking
+      resources, such as the VPC and subnet that will be used in this stack.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: '^[a-zA-Z][-a-zA-Z0-9]*$'
+    Default: Appstream-Network
+  
+  MyFleetImage:
+    Description:  Appstream2 fleet image used (possibly shared with your account)
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: MyFleetImage
+    
+Resources:
+    AppStreamFleet:
+        Type: "AWS::AppStream::Fleet"
+        Properties:
+            Name: "Fleet-AS-v3-20200528"
+            DisplayName: "Fleet-AS-v3-20200528"
+            Description: "Fleet of instances supporting applications"
+            ImageArn: !Ref MyFleetImage
+            InstanceType: "stream.standard.medium"
+            DisconnectTimeoutInSeconds: 900
+            VpcConfig: 
+               SubnetIds:
+                  - Fn::ImportValue:
+                      !Sub ${NetworkStackName}-MyPrivSub1ID
+                  - Fn::ImportValue:
+                      !Sub ${NetworkStackName}-MyPrivSub2ID
+               SecurityGroupIds: 
+                  - Fn::ImportValue:
+                      !Sub ${NetworkStackName}-SGfleetID
+            ComputeCapacity: 
+                DesiredInstances: 1
+            EnableDefaultInternetAccess: false
+            DomainJoinInfo: 
+                DirectoryName: ""
+                OrganizationalUnitDistinguishedName: ""
+            FleetType: "ALWAYS_ON"
+            MaxUserDurationInSeconds: 57600

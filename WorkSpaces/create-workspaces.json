@@ -1,0 +1,18 @@
+{
+    "Workspaces": [ 
+       { 
+          "BundleId": "wsb-fwsc3v5vz",
+          "DirectoryId": "d-906751f5f2",
+          "RootVolumeEncryptionEnabled": false,
+          "UserName": "nkean.adm",
+          "UserVolumeEncryptionEnabled": false,
+          "WorkspaceProperties": { 
+             "ComputeTypeName": "STANDARD",
+             "RootVolumeSizeGib": 80,
+             "UserVolumeSizeGib": 10,
+             "RunningMode": "AUTO_STOP",
+             "RunningModeAutoStopTimeoutInMinutes": 60
+          }
+       }
+    ]
+}  

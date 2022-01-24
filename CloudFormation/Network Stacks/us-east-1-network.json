@@ -1,0 +1,438 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Deploys the network stack for CloudFormation_s.",
+
+    "Metadata": {
+
+    },
+
+    "Parameters": {
+    
+    },
+
+    "Mappings": {
+
+    },
+
+    "Conditions": {
+
+    },
+
+    "Resources": {
+        
+        "CloudFormation": {
+          "Type": "AWS::EC2::VPC",
+          "Properties": {
+            "CidrBlock": "10.1.0.0/16",
+            "Tags":[ { "Key": "Name", "Value":  "CloudFormation" }, {"Key" : "CloudFormation_Network", "Value" : "VPC"}]
+          }
+        },
+
+        "CloudFormationIGW": {
+          "Type": "AWS::EC2::InternetGateway",
+          "Properties": {
+            "Tags": [{ "Key": "Name", "Value":  "CloudFormation_IGW" }, {"Key" : "CloudFormation_Network", "Value" : "IGW"}]
+          }
+        },
+
+        "AttachGateway": {
+          "Type": "AWS::EC2::VPCGatewayAttachment",
+          "Properties": {
+            "VpcId": { "Ref": "CloudFormation" },
+            "InternetGatewayId": { "Ref": "CloudFormationIGW" }
+          }
+        },
+        
+        "CloudFormationPublic1a": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.11.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Public_1a"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPublic1b": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.12.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Public_1b"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPublic1c": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.13.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Public_1c"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPublic1d": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.14.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Public_1d"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPublic1e": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.15.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Public_1e"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPublic1f": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.16.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Public_1f"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPrivate1a": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.21.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Private_1a"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+          
+        "CloudFormationPrivate1b": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.22.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Private_1b"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPrivate1c": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.23.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Private_1c"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPrivate1d": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.24.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Private_1d"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPrivate1e": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1a",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.25.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Private_1e"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+        
+        "CloudFormationPrivate1f": {
+          "Type": "AWS::EC2::Subnet",
+          "Properties": {
+            "AvailabilityZone": "us-east-1b",
+            "VpcId": { "Ref": "CloudFormation" },
+            "CidrBlock": "10.1.26.0/24",
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Private_1f"},{"Key" : "CloudFormation_Network", "Value" : "Subnet"}]
+          }
+        },
+
+        "PublicRT": {
+          "Type": "AWS::EC2::RouteTable",
+          "Properties": {
+            "VpcId": { "Ref": "CloudFormation" },
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Public_RT"}, {"Key" : "CloudFormation_Network", "Value" : "Route_Table"}]
+          }
+        },
+        
+        "PrivateRT": {
+          "Type": "AWS::EC2::RouteTable",
+          "Properties": {
+            "VpcId": { "Ref": "CloudFormation" },
+            "Tags": [{"Key" : "Name", "Value" : "CloudFormation_Private_RT"}, {"Key" : "CloudFormation_Network", "Value" : "Route_Table"}]
+          }
+        },
+        
+        "NATGW" : {
+          "Type" : "AWS::EC2::NatGateway",
+          "Properties" : {
+              "AllocationId" : { "Fn::GetAtt" : ["EIP", "AllocationId"]},
+              "SubnetId" : { "Ref" : "CloudFormationPublic1a"},
+              "Tags" : [ {"Key" : "Name", "Value" : "CloudFormation_NAT_Gateway" }, {"Key" : "CloudFormation_Network", "Value" : "NATGW"}]
+            }
+        },
+
+        "EIP" : {
+          "DependsOn" : "AttachGateway",
+          "Type" : "AWS::EC2::EIP",
+          "Properties" : {
+              "Domain" : "vpc",
+              "Tags":[ {"Key": "Name", "Value":  "CloudFormation_Elastic_IP"}, {"Key": "CloudFormation_Network", "Value" : "EIP"}]
+          }
+        },
+
+        "PrivateRoute" : {
+          "Type" : "AWS::EC2::Route",
+          "Properties" : {
+              "RouteTableId" : { "Ref" : "PrivateRT" },
+              "DestinationCidrBlock" : "0.0.0.0/0",
+              "NatGatewayId" : { "Ref" : "NATGW" }
+          }
+        },
+        
+        "PublicRoute": {
+          "Type": "AWS::EC2::Route",
+          "Properties": {
+            "RouteTableId": { "Ref": "PublicRT" },
+            "DestinationCidrBlock": "0.0.0.0/0",
+            "GatewayId": { "Ref": "CloudFormationIGW" }
+          }
+        },
+        
+        "PrivateRTAssociation1a": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPrivate1a"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1b": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPrivate1b"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1c": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPrivate1c"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1d": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPrivate1d"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1e": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPrivate1e"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PrivateRTAssociation1f": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPrivate1f"},
+            "RouteTableId": { "Ref": "PrivateRT" }
+          }
+        },
+
+        "PublicRTAssociation1a": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPublic1a"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1b": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPublic1b"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1c": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPublic1c"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1d": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPublic1d"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1e": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPublic1e"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "PublicRTAssociation1f": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "CloudFormationPublic1f"},
+            "RouteTableId": { "Ref": "PublicRT" }
+          }
+        },
+
+        "TransitGateway": {
+        "Type" : "AWS::EC2::TransitGateway",
+        "Properties" : {
+            "Description" : "CloudFormaiton_VPC_Transit_Gateway",
+            "Tags" : [ {"Key" : "Name", "Value" : "CloudFormaiton_VPC_Transit_Gateway"}, { "Key" : "CloudFormation_Network",  "Value" : "Transit Gateway"} ]
+          }
+        },
+        
+        "TransitGatewayAttachment": {
+          "Type" : "AWS::EC2::TransitGatewayAttachment",
+          "Properties" : {
+              "SubnetIds" : [ { "Ref": "CloudFormationPrivate1a" } ],
+              "TransitGatewayId" : { "Ref": "TransitGateway" },
+              "VpcId" : { "Ref": "CloudFormation" },
+              "Tags" : [ {"Key" : "Name", "Value" : "CloudFormaiton_VPC_TAttachment"}, { "Key" : "CloudFormation_Network",  "Value" : "Transit Gateway Attachment"} ] }
+        }
+      
+      },
+
+    "Outputs": {
+      "VPCId" : {
+        "Description" : "VPCID of the newly created VPC",
+        "Value" :  { "Ref" : "CloudFormation" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-VPCID" }
+        }
+      },
+
+      "CloudFormationPrivate1a" : {
+        "Description" : "Private Subnet in AZ 1a",
+        "Value" :  { "Ref" : "CloudFormationPrivate1a" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPrivate1a" }
+        }
+      },
+
+      "CloudFormationPrivate1b" : {
+        "Description" : "Private Subnet in AZ 1b",
+        "Value" :  { "Ref" : "CloudFormationPrivate1b" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPrivate1b" }
+        }
+      },
+
+      "CloudFormationPrivate1c" : {
+        "Description" : "Private Subnet in AZ 1c",
+        "Value" :  { "Ref" : "CloudFormationPrivate1c" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPrivate1c" }
+        }
+      },
+
+      "CloudFormationPrivate1d" : {
+        "Description" : "Private Subnet in AZ 1d",
+        "Value" :  { "Ref" : "CloudFormationPrivate1d" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPrivate1d" }
+        }
+      },
+
+      "CloudFormationPrivate1e" : {
+        "Description" : "Private Subnet in AZ 1e",
+        "Value" :  { "Ref" : "CloudFormationPrivate1e" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPrivate1e" }
+        }
+      },
+
+      "CloudFormationPrivate1f" : {
+        "Description" : "Private Subnet in AZ 1f",
+        "Value" :  { "Ref" : "CloudFormationPrivate1f" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPrivate1f" }
+        }
+      },
+
+      "CloudFormationPublic1a" : {
+        "Description" : "Public Subnet in AZ 1a",
+        "Value" :  { "Ref" : "CloudFormationPublic1a" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPublic1a" }
+        }
+      },
+
+      "CloudFormationPublic1b" : {
+        "Description" : "Public Subnet in AZ 1b",
+        "Value" :  { "Ref" : "CloudFormationPublic1b" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPublic1b" }
+        }
+      },
+
+      "CloudFormationPublic1c" : {
+        "Description" : "Public Subnet in AZ 1c",
+        "Value" :  { "Ref" : "CloudFormationPublic1c" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPublic1c" }
+        }
+      },
+
+      "CloudFormationPublic1d" : {
+        "Description" : "Public Subnet in AZ 1d",
+        "Value" :  { "Ref" : "CloudFormationPublic1d" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPublic1d" }
+        }
+      },
+
+      "CloudFormationPublic1e" : {
+        "Description" : "Public Subnet in AZ 1e",
+        "Value" :  { "Ref" : "CloudFormationPublic1e" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPublic1e" }
+        }
+      },
+
+      "CloudFormationPublic1f" : {
+        "Description" : "Public Subnet in AZ 1f",
+        "Value" :  { "Ref" : "CloudFormationPublic1f" },
+        "Export" : {
+          "Name" : {"Fn::Sub": "${AWS::StackName}-CloudFormationPublic1f" }
+        }
+      }
+    }
+}

@@ -1,0 +1,11 @@
+5/11/2020 - Describe all the scripts and console guidance to setup Appstream2 environment
+
+steps:
+1) run script "setup-ssm-for-appstream"
+2) run CloudFormation template "MyAppStream-Network.template"
+3) run CloudFormation template "MyAppStream-Fleet.template"
+4) run CloudFormation template "MyAppStream-Stack.template"
+5) In console create user and associate with stack.  Have system send email.
+OR
+5) In Appstream console -> Stacks -> [Actions]->[Create streaming URL] to create one for user.  Set expiration from 30 min to 7 days.  Assign to student and send email (get Brayden's automated Excel email code)
+
