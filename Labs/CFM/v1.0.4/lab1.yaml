@@ -1,0 +1,1085 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Lab 1 starts with 1 vpc and several servers that have compliance issues.
+Parameters:
+  companyName:
+    Description: Name of your company
+    Type: String
+    Default: AnyCompany Services, LLC
+  companyAbbr:
+    Description: Abbreviaion of your company 
+    Type: String
+    Default: ACS
+  defaultUserPassword:
+    Description: Default console password for users
+    Type: String
+    NoEcho: True
+    Default: userPassword!
+  dbRootPassword:
+    Description: the database root password
+    Type: String
+    NoEcho: true
+    Default: lab-Password!
+  dbServicePassword:
+    Description: the database application service password
+    Type: String
+    NoEcho: true
+    Default: labPassword!
+  instanceType:
+    Description: Instance type for AP server
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t3.medium
+      - c5.large
+      - m5.large
+  latestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+Resources:
+  ##Network Resources
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/21
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: Lab-VPC
+  PUBSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Pub-a
+  PRIVSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/23
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Priv-a
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - IGW
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+  NGWaEIP:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewaya:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NGWaEIP.AllocationId
+      SubnetId: !Ref PUBSUBNETa
+  PUBRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - public-RT
+  PUBRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETa
+      RouteTableId: !Ref PUBRT
+  IGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PUBRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  PRIVRTa:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - private-RTa
+  PRIVRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETa
+      RouteTableId: !Ref PRIVRTa
+  NGWRoutea:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PRIVRTa
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewaya
+  ##IAM Resources
+  ###Roles for the instances to talk to SSM
+  APPSERVERROLE: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+  APPSERVERINSTANCEPROFILE: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "APPSERVERROLE"
+  SQLSERVERROLE: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+  SQLSERVERINSTANCEPROFILE: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "SQLSERVERROLE"
+  RunInstancesWithTagsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: lab1-Tagging-Policy
+      Users:
+        - awsstudent
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowRunInstancesWithRestrictions
+            Effect: Allow
+            Action:
+              - ec2:RunInstances
+              - ec2:CreateVolume
+            Resource:
+              - arn:aws:ec2:*:*:instance/*
+            Condition:
+              StringEquals:
+                  aws:RequestTag/Environment: Test
+                  aws:RequestTag/Department: Finance
+              ForAnyValue:StringEquals:
+                  aws:RequestedRegion:
+                    - us-east-1
+                    - us-east-2
+                    - us-west-1
+                    - us-west-2
+                    - ap-southeast-2
+          - Sid: AllowCreateTagsOnlyWhenLaunchingEC2
+            Effect: Allow
+            Action:
+              - ec2:CreateTags
+            Resource:
+              - "arn:aws:ec2:*:*:volume/*"
+              - "arn:aws:ec2:*:*:instance/*"
+            Condition:
+              StringEquals:
+                ec2:CreateAction: RunInstances
+          - Sid: AllowCreationOfInstanceResources
+            Effect: Allow
+            Action:
+              - ec2:RunInstances
+            Resource:
+              - arn:aws:ec2:*::image/*
+              - arn:aws:ec2:*::snapshot/*
+              - arn:aws:ec2:*:*:subnet/*
+              - arn:aws:ec2:*:*:network-interface/*
+              - arn:aws:ec2:*:*:security-group/*
+              - arn:aws:ec2:*:*:key-pair/*
+              - arn:aws:ec2:*:*:volume/*
+  ###Policy for Config
+  LabConfigPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: EnableConfigPermissions
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            Effect: Allow
+            Action: 
+              - 'acm:DescribeCertificate' 
+              - 'acm:ListCertificates' 
+              - 'acm:ListTagsForCertificate' 
+              - 'application-autoscaling:DescribeScalableTargets' 
+              - 'application-autoscaling:DescribeScalingPolicies' 
+              - 'autoscaling:DescribeAutoScalingGroups' 
+              - 'autoscaling:DescribeLaunchConfigurations' 
+              - 'autoscaling:DescribeLifecycleHooks' 
+              - 'autoscaling:DescribePolicies' 
+              - 'autoscaling:DescribeScheduledActions' 
+              - 'autoscaling:DescribeTags' 
+              - 'cloudfront:ListTagsForResource' 
+              - 'cloudformation:describeType' 
+              - 'cloudformation:listTypes' 
+              - 'cloudtrail:DescribeTrails' 
+              - 'cloudtrail:GetEventSelectors' 
+              - 'cloudtrail:GetTrailStatus' 
+              - 'cloudtrail:ListTags' 
+              - 'cloudwatch:DescribeAlarms' 
+              - 'codepipeline:GetPipeline' 
+              - 'codepipeline:GetPipelineState' 
+              - 'codepipeline:ListPipelines' 
+              - 'config:BatchGet*' 
+              - 'config:Describe*' 
+              - 'config:Get*' 
+              - 'config:List*' 
+              - 'config:Put*' 
+              - 'config:Select*' 
+              - 'dms:DescribeReplicationInstances' 
+              - 'dynamodb:DescribeContinuousBackups' 
+              - 'dynamodb:DescribeLimits' 
+              - 'dynamodb:DescribeTable' 
+              - 'dynamodb:ListTables' 
+              - 'dynamodb:ListTagsOfResource' 
+              - 'ec2:Describe*' 
+              - 'elasticache:DescribeCacheClusters' 
+              - 'elasticache:DescribeReplicationGroups' 
+              - 'elasticfilesystem:DescribeFileSystems' 
+              - 'elasticloadbalancing:DescribeListeners' 
+              - 'elasticloadbalancing:DescribeLoadBalancerAttributes' 
+              - 'elasticloadbalancing:DescribeLoadBalancerPolicies' 
+              - 'elasticloadbalancing:DescribeLoadBalancers' 
+              - 'elasticloadbalancing:DescribeRules' 
+              - 'elasticloadbalancing:DescribeTags' 
+              - 'elasticmapreduce:DescribeCluster' 
+              - 'elasticmapreduce:DescribeSecurityConfiguration' 
+              - 'elasticmapreduce:ListClusters' 
+              - 'elasticmapreduce:ListInstances' 
+              - 'es:DescribeElasticsearchDomain' 
+              - 'es:DescribeElasticsearchDomains' 
+              - 'es:ListDomainNames' 
+              - 'es:ListTags' 
+              - 'guardduty:GetDetector' 
+              - 'guardduty:GetFindings' 
+              - 'guardduty:GetMasterAccount' 
+              - 'guardduty:ListDetectors' 
+              - 'guardduty:ListFindings' 
+              - 'iam:GenerateCredentialReport' 
+              - 'iam:GetAccountAuthorizationDetails' 
+              - 'iam:GetAccountPasswordPolicy' 
+              - 'iam:GetAccountSummary' 
+              - 'iam:GetCredentialReport' 
+              - 'iam:GetGroup' 
+              - 'iam:GetGroupPolicy' 
+              - 'iam:GetPolicy' 
+              - 'iam:GetPolicyVersion' 
+              - 'iam:GetRole' 
+              - 'iam:GetRolePolicy' 
+              - 'iam:GetUser' 
+              - 'iam:GetUserPolicy' 
+              - 'iam:ListAttachedGroupPolicies' 
+              - 'iam:ListAttachedRolePolicies' 
+              - 'iam:ListAttachedUserPolicies' 
+              - 'iam:ListEntitiesForPolicy' 
+              - 'iam:ListGroupPolicies' 
+              - 'iam:ListGroupsForUser' 
+              - 'iam:ListInstanceProfilesForRole' 
+              - 'iam:ListPolicyVersions' 
+              - 'iam:ListRolePolicies' 
+              - 'iam:ListUserPolicies' 
+              - 'iam:ListVirtualMFADevices' 
+              - 'kms:DescribeKey' 
+              - 'kms:GetKeyPolicy' 
+              - 'kms:GetKeyRotationStatus' 
+              - 'kms:ListKeys' 
+              - 'kms:ListResourceTags' 
+              - 'lambda:GetAlias' 
+              - 'lambda:GetFunction' 
+              - 'lambda:GetPolicy' 
+              - 'lambda:ListAliases' 
+              - 'lambda:ListFunctions' 
+              - 'logs:DescribeLogGroups' 
+              - 'rds:DescribeDBClusters' 
+              - 'rds:DescribeDBClusterSnapshotAttributes' 
+              - 'rds:DescribeDBClusterSnapshots' 
+              - 'rds:DescribeDBInstances' 
+              - 'rds:DescribeDBSecurityGroups' 
+              - 'rds:DescribeDBSnapshotAttributes' 
+              - 'rds:DescribeDBSnapshots' 
+              - 'rds:DescribeDBSubnetGroups' 
+              - 'rds:DescribeEventSubscriptions' 
+              - 'rds:ListTagsForResource' 
+              - 'redshift:DescribeClusterParameterGroups' 
+              - 'redshift:DescribeClusterParameters' 
+              - 'redshift:DescribeClusterSecurityGroups' 
+              - 'redshift:DescribeClusterSnapshots' 
+              - 'redshift:DescribeClusterSubnetGroups' 
+              - 'redshift:DescribeClusters' 
+              - 'redshift:DescribeEventSubscriptions' 
+              - 'redshift:DescribeLoggingStatus' 
+              - 's3:GetAccelerateConfiguration' 
+              - 's3:GetAccountPublicAccessBlock' 
+              - 's3:GetBucketAcl' 
+              - 's3:GetBucketCORS' 
+              - 's3:GetBucketLocation' 
+              - 's3:GetBucketLogging' 
+              - 's3:GetBucketNotification' 
+              - 's3:GetBucketObjectLockConfiguration' 
+              - 's3:GetBucketPolicy' 
+              - 's3:GetBucketPublicAccessBlock' 
+              - 's3:GetBucketRequestPayment' 
+              - 's3:GetBucketTagging' 
+              - 's3:GetBucketVersioning' 
+              - 's3:GetBucketWebsite' 
+              - 's3:GetEncryptionConfiguration' 
+              - 's3:GetLifecycleConfiguration' 
+              - 's3:GetReplicationConfiguration' 
+              - 's3:ListAllMyBuckets' 
+              - 's3:ListBucket' 
+              - 'sagemaker:DescribeEndpointConfig' 
+              - 'sagemaker:DescribeNotebookInstance' 
+              - 'sagemaker:ListEndpointConfigs' 
+              - 'sagemaker:ListNotebookInstances' 
+              - 'secretsmanager:ListSecrets' 
+              - 'secretsmanager:ListSecretVersionIds' 
+              - 'shield:DescribeDRTAccess' 
+              - 'shield:DescribeProtection' 
+              - 'shield:DescribeSubscription' 
+              - 'sns:GetTopicAttributes' 
+              - 'sns:ListSubscriptions' 
+              - 'sns:ListTagsForResource' 
+              - 'sns:ListTopics' 
+              - 'sqs:GetQueueAttributes' 
+              - 'sqs:ListQueues' 
+              - 'sqs:ListQueueTags' 
+              - 'ssm:DescribeAutomationExecutions' 
+              - 'ssm:DescribeDocument' 
+              - 'ssm:GetAutomationExecution' 
+              - 'ssm:GetDocument' 
+              - 'support:DescribeCases' 
+              - 'waf-regional:GetWebACL' 
+              - 'waf-regional:GetWebACLForResource'
+            Resource: '*'
+      Roles:
+        - LabConfigServiceRole
+    DependsOn: LabConfigServiceRole
+  ###Role for Config
+  LabConfigServiceRole: 
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      RoleName: LabConfigServiceRole
+      AssumeRolePolicyDocument: 
+        Version: 2012-10-17
+        Statement: 
+          - 
+            Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'config.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+  ###Policy for Auto Remediation
+  LabAutomationPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: EnableConfigAutoRemediation
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AutomationActions
+            Effect: Allow
+            Action: 
+              - 'ssm:CancelCommand'
+              - 'ssm:GetCommandInvocation'
+              - 'ssm:ListCommandInvocations'
+              - 'ssm:ListCommands'
+              - 'ssm:SendCommand'
+              - 'ssm:GetAutomationExecution'
+              - 'ssm:GetParameters'
+              - 'ssm:StartAutomationExecution'
+              - 'ssm:ListTagsForResource'
+              - 'ec2:DescribeInstanceAttribute'
+              - 'ec2:DescribeInstanceStatus'
+              - 'ec2:DescribeInstances'
+              - 'ec2:StopInstances'
+              - 'sns:Publish'
+              - 'lambda:InvokeFunction'
+              - "ec2:CreateImage"
+              - "ec2:CopyImage"
+              - "ec2:DeregisterImage"
+              - "ec2:DescribeImages"
+              - "ec2:DeleteSnapshot"
+              - "ec2:StartInstances"
+              - "ec2:RunInstances"
+              - "ec2:StopInstances"
+              - "ec2:TerminateInstances"
+              - "ec2:DescribeInstanceStatus"
+              - "ec2:CreateTags"
+              - "ec2:DeleteTags"
+              - "ec2:DescribeTags"
+              - "cloudformation:CreateStack"
+              - "cloudformation:DescribeStackEvents"
+              - "cloudformation:DescribeStacks"
+              - "cloudformation:UpdateStack"
+              - "cloudformation:DeleteStack"
+            Resource: '*'
+          - Sid: PassRole 
+            Effect: Allow
+            Action:
+              - 'iam:PassRole'
+            Resource: !GetAtt LabAutomationRole.Arn
+            Condition:
+              StringEquals:
+                'iam:PassedToService':
+                  - ssm.amazonaws.com
+                  - config.amazonaws.com
+      Roles:
+        - LabAutomationRole
+    DependsOn: LabAutomationRole
+  ###Role for Auto Remediation
+  LabAutomationRole: 
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      RoleName: LabAutomationRole
+      AssumeRolePolicyDocument: 
+        Version: 2012-10-17
+        Statement: 
+          - 
+            Effect: 'Allow'
+            Principal: 
+              Service: 
+                - config.amazonaws.com
+                - ssm.amazonaws.com
+                - ec2.amazonaws.com
+            Action: 
+              - 'sts:AssumeRole'
+  ###Policy for CompliantEC2Creation
+  CompliantEC2Creation:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: CompliantEC2Creation
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowToDescribeAll
+            Effect: Allow
+            Action:
+            - 'ec2:Describe*'
+            Resource: "*"
+          - Sid: AllowRunInstances
+            Effect: Allow
+            Action: 
+              - 'ec2:RunInstances'
+              - 'ec2:CreateVolume'
+            Resource:
+              - 'arn:aws:ec2:*::image/*'
+              - 'arn:aws:ec2:*::snapshot/*'
+              - 'arn:aws:ec2:*:*:subnet/*'
+              - 'arn:aws:ec2:*:*:network-interface/*'
+              - 'arn:aws:ec2:*:*:security-group/*'
+              - 'arn:aws:ec2:*:*:key-pair/*'
+              - 'arn:aws:ec2:*:*:volume/*'
+          - Sid: AllowRunInstancesWithRestrictions
+            Effect: Allow
+            Action:
+              - 'ec2:RunInstances'
+            Resource:
+              - 'arn:aws:ec2:*:*:instance/*'
+            Condition:
+              StringEquals:
+                aws:RequestTag/Environment: 'Development'
+                aws:RequestTag/Department: 'Finance'
+                aws:RequestTag/Application: 'Accounts Payable'
+                ec2:InstanceType: 't3.medium'
+          - Sid: AllowCreateTagsOnlyLaunching
+            Effect: Allow
+            Action:
+              - 'ec2:CreateTags'
+            Resource:
+              - 'arn:aws:ec2:*:*:volume/*'
+              - 'arn:aws:ec2:*:*:instance/*'
+            Condition:
+              StringEquals:
+                ec2:CreateAction: RunInstances
+      Groups:
+        - !Ref DevelopersGroup
+    DependsOn: DevelopersGroup
+###Group for AP Developers
+  DevelopersGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: APDevelopers
+
+  ###########
+  # ReadOnly group for student
+  ###########
+  ReadOnlyGroup:
+      Type: "AWS::IAM::Group"
+      Properties:
+        GroupName: QLReadOnly
+        ManagedPolicyArns: [ "arn:aws:iam::aws:policy/ReadOnlyAccess" ]
+  GroupAssignment:
+      Type: "AWS::IAM::UserToGroupAddition"
+      DependsOn: ReadOnlyGroup
+      Properties:
+        GroupName: QLReadOnly
+        Users:
+          - awsstudent
+  ##EC2 Prod Resources
+  ###Security Group for app server allowing http from internet
+  APPSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP App Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SG
+  allowHTTP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt APPSG.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  ###App Server with httpd, php and light website
+  appServer:
+    Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <title>The Prod AP System</title>
+                </head>
+                <body>
+                  <h1>The Prod AP System</h1>
+                  <small>${companyName} 2020</small>
+                </body>
+                </html>
+              mode: '000600'
+              owner: apache
+              group: apache
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.appServer.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource appServer --region ${AWS::Region}
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref APPSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PUBSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSG
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource appServer --region ${AWS::Region}
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource appServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: App-Server-Prod
+        - Key: Function
+          Value: App
+        - Key: Application
+          Value: Accounts Payable
+        - Key: Environment
+          Value: Production
+        - Key: Department
+          Value: Finance
+  ###Security Group for mariadb server allowing 3306 from appsg
+  DBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP SQL Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SQL-SG
+  allowMySQL:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt DBSG.GroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !GetAtt APPSG.GroupId
+  ###mariadb server with database and mock app data
+  SQLServer:
+    Type: AWS::EC2::Instance
+    DependsOn: NGWRoutea
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          InstallAndSecure:
+            - Install
+            - Secure
+            - Configure
+        Install:
+          packages:
+            yum:
+              mariadb-server: []
+          files:
+            /tmp/secure.sql:
+              content: !Sub |
+                UPDATE mysql.user SET Password=PASSWORD('${dbRootPassword}') WHERE User='root';
+                DELETE FROM mysql.user WHERE User='';
+                DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+                DROP DATABASE IF EXISTS test;
+                DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+                FLUSH PRIVILEGES;
+            /tmp/ap_install.sql:
+              content: !Sub |
+                CREATE DATABASE APDB;
+                CREATE USER 'ap_service'@'%' IDENTIFIED BY '${dbServicePassword}';
+                GRANT ALL PRIVILEGES ON APDB.* TO 'ap_service'@'%';
+                CREATE TABLE APDB.customers 
+                (id INT NOT NULL AUTO_INCREMENT KEY, 
+                first VARCHAR(254),
+                last VARCHAR(254), 
+                addr VARCHAR(254), 
+                city VARCHAR(254), 
+                state VARCHAR(254), 
+                zip VARCHAR(254),
+                accountNumber INT(9) ZEROFILL NOT NULL 
+                );
+
+                CREATE TABLE APDB.transactions
+                (id INT NOT NULL AUTO_INCREMENT KEY,
+                accountNumber INT(8) ZEROFILL NOT NULL,
+                credit BOOLEAN,
+                amount DECIMAL,
+                trans_date DATE,
+                trans_time TIME
+                );
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.SQLServer.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+                --resource SQLServer --configsets InstallAndSecure --region \
+                ${AWS::Region}
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              mariadb:
+                enabled: 'true'
+                ensureRunning: 'true'
+            cfn-hup:
+              enabled: 'true'
+              ensureRunning: 'true'
+              files:
+                - /etc/cfn/cfn-hup.conf
+                - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        Secure:
+          commands:
+            01_set_mysql_root_password:
+              command: !Sub |
+                mysql --user=root < /tmp/secure.sql
+        Configure:
+          commands:
+            configure_AP_DB:
+                command: !Sub |
+                  mysql --user=root --password=${dbRootPassword} < /tmp/ap_install.sql
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref SQLSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PRIVSUBNETa
+      SecurityGroupIds: 
+        - !Ref DBSG
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -ex
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource SQLServer --region ${AWS::Region} \
+            --configsets InstallAndSecure
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource SQLServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: DB-Server-Prod
+        - Key: Function
+          Value: SQL
+        - Key: Application
+          Value: Accounts Payable
+        - Key: Department
+          Value: Finance
+        - Key: Environment
+          Value: Production
+  ##EC2 Test Resources
+  ###Security Group for app server allowing http from internet
+  APPSGT:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP Test App Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-T-SG
+  allowHTTPT:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt APPSGT.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  ###App Server with httpd, php and light website
+  appServerT:
+    Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <title>The Test AP System</title>
+                </head>
+                <body>
+                  <h1>The Test AP System</h1>
+                  <small>${companyName} 2020</small>
+                </body>
+                </html>
+              mode: '000600'
+              owner: apache
+              group: apache
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.appServerT.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource appServerT --region ${AWS::Region}
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref APPSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PUBSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSGT
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource appServerT --region ${AWS::Region}
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource appServerT --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: App-Server-Test
+        - Key: Function
+          Value: App
+        - Key: Application
+          Value: Accounts Payable
+        - Key: Environment
+          Value: Test
+  ###Security Group for mariadb server allowing 3306 from appsg
+  DBSGT:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP Test SQL Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-T-SQL-SG
+  allowMySQLT:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt DBSGT.GroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !GetAtt APPSGT.GroupId
+  ###mariadb server with database and mock app data
+  SQLServerT:
+    Type: AWS::EC2::Instance
+    DependsOn: NGWRoutea
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          InstallAndSecure:
+            - Install
+            - Secure
+            - Configure
+        Install:
+          packages:
+            yum:
+              mariadb-server: []
+          files:
+            /tmp/secure.sql:
+              content: !Sub |
+                UPDATE mysql.user SET Password=PASSWORD('${dbRootPassword}') WHERE User='root';
+                DELETE FROM mysql.user WHERE User='';
+                DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+                DROP DATABASE IF EXISTS test;
+                DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+                FLUSH PRIVILEGES;
+              mode: '000400'
+              owner: root
+              group: root
+            /tmp/ap_install.sql:
+              content: !Sub |
+                CREATE DATABASE APDB;
+                CREATE USER 'ap_service'@'%' IDENTIFIED BY '${dbServicePassword}';
+                GRANT ALL PRIVILEGES ON APDB.* TO 'ap_service'@'%';
+                CREATE TABLE APDB.customers 
+                (id INT NOT NULL AUTO_INCREMENT KEY, 
+                first VARCHAR(254),
+                last VARCHAR(254), 
+                addr VARCHAR(254), 
+                city VARCHAR(254), 
+                state VARCHAR(254), 
+                zip VARCHAR(254),
+                accountNumber INT(9) ZEROFILL NOT NULL 
+                );
+
+                CREATE TABLE APDB.transactions
+                (id INT NOT NULL AUTO_INCREMENT KEY,
+                accountNumber INT(8) ZEROFILL NOT NULL,
+                credit BOOLEAN,
+                amount DECIMAL,
+                trans_date DATE,
+                trans_time TIME
+                );
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.SQLServerT.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v  --stack ${AWS::StackName} \
+                --resource SQLServerT --configsets InstallAndSecure --region \
+                ${AWS::Region}
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              mariadb:
+                enabled: 'true'
+                ensureRunning: 'true'
+            cfn-hup:
+              enabled: 'true'
+              ensureRunning: 'true'
+              files:
+                - /etc/cfn/cfn-hup.conf
+                - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        Secure:
+          commands:
+            01_set_mysql_root_password:
+              command: !Sub |
+                mysql --user=root < /tmp/secure.sql
+        Configure:
+          commands:
+            configure_AP_DB:
+                command: !Sub |
+                  mysql --user=root --password=${dbRootPassword} < /tmp/ap_install.sql
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref SQLSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PRIVSUBNETa
+      SecurityGroupIds: 
+        - !Ref DBSGT
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -ex
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource SQLServerT --region ${AWS::Region} \
+            --configsets InstallAndSecure
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource SQLServerT --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: DB-Server-Test
+        - Key: Function
+          Value: SQL
+        - Key: Application
+          Value: AP
+        - Key: Department
+          Value: Finance
+
+Outputs:
+  LabAutomationRole:
+    Description: Lab Automation Role ARN
+    Value: !GetAtt LabAutomationRole.Arn
+  LabRegion:
+    Description: The Region that your Lab is running in
+    Value: !Ref AWS::Region

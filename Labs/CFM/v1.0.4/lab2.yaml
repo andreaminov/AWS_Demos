@@ -1,0 +1,350 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: creates a vpc and resources for CFM Lab 2
+Parameters:
+  companyName:
+    Description: Name of your company
+    Type: String
+    Default: Example Corp
+  instanceType:
+    Description: Instance type for Web App server
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t3.medium
+      - c5.large
+      - m5.large
+  latestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+Resources:
+  ##Network Resources
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/21
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: Lab-VPC
+  PUBSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: Lab-Pub-a
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Lab-IGW
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+  PUBRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Lab-Public-RT
+  PUBRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETa
+      RouteTableId: !Ref PUBRT
+  IGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PUBRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  ##AWS BackupRole
+  BackupServiceRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      RoleName: LabBackupServiceRole
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "backup.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
+      Path: "/"
+  ###########
+  # ReadOnly group for student
+  ###########
+  ReadOnlyGroup:
+      Type: "AWS::IAM::Group"
+      Properties:
+        GroupName: QLReadOnly
+        ManagedPolicyArns: [ "arn:aws:iam::aws:policy/ReadOnlyAccess" ]
+  GroupAssignment:
+      Type: "AWS::IAM::UserToGroupAddition"
+      DependsOn: ReadOnlyGroup
+      Properties:
+        GroupName: QLReadOnly
+        Users:
+          - awsstudent
+  ###lambda execution role
+  AWSLambdaASGUpdate:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: LabLambdaRole
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AutoScalingFullAccess
+      Path: "/"
+  ##EC2 Prod Resources
+  ###Security Group for app server allowing http from internet
+  APPSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for the Production App Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Prod-Web-App-SG
+  allowHTTP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt APPSG.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  ###App Server with httpd, php and light website
+  appServer:
+    Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <!DOCTYPE html>
+                <html lang="en" style="height: 100%;" >
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+                    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+                    <title>The Production System</title>
+                </head>
+                <body style="height: 100%;">
+                  <header style='background: #a13941;color: #e9ecef;'>
+                    <div class='container' style='padding: 20px;'>
+                      <h1>The Production System</h1>
+                    </div>
+                  </header>
+                  <section style='background: #e9ecef;min-height:100%'>
+                    <div class='container' onSubmit="alert('Come on, this isn\'t a real production system. What were those credentials for?')">      
+                        <form class="form-signin w-50" style="padding: 125px 0 125px 0;">        
+                        <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
+                        <label for="inputEmail" class="sr-only">Email address</label>
+                        <input type="email" id="inputEmail" class="form-control" placeholder="Email address" required autofocus>
+                        <label for="inputPassword" class="sr-only">Password</label>
+                        <input type="password" id="inputPassword" class="form-control" placeholder="Password" required>
+                        <div class="checkbox mb-3">
+                          <label>
+                            <input type="checkbox" value="remember-me"> Remember me
+                          </label>
+                        </div>
+                        <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
+                      </form>
+                    </div>
+                  <section>
+                  <footer style="background: #a13941;color: #e9ecef;" >
+                    <div class="container"><small>${companyName} 2020</small></div>
+                  </footer>
+                </body>
+                </html>
+              mode: '000600'
+              owner: apache
+              group: apache
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PUBSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSG
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource appServer --region ${AWS::Region}
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource appServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: Web-App-Prod
+        - Key: Function
+          Value: App
+        - Key: Application
+          Value: Accounts Payable
+        - Key: Environment
+          Value: Prod
+        - Key: Backup
+          Value: Web-App-Prod
+  ##EC2 Test Resources
+  ###Security Group for app server allowing http from internet
+  APPSGT:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for the Test App Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Test-Web-App-SG
+  allowHTTPT:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt APPSGT.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  ###App Server with httpd, php and light website
+  appServerT:
+    Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <!DOCTYPE html>
+                <html lang="en" style="height: 100%;" >
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+                    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+                    <title>The Test System</title>
+                </head>
+                <body style="height: 100%;">
+                  <header style='background: #a13941;color: #e9ecef;'>
+                    <div class='container' style='padding: 20px;'>
+                      <h1>The Test System</h1>
+                  </div>
+                  </header>
+                  <section style='background: #e9ecef;min-height:100%'>
+                    <div class='container' onSubmit="alert('Come on, this isn\'t a real test system. What were those credentials for?')">      
+                        <form class="form-signin w-50" style="padding: 125px 0 125px 0;">        
+                        <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
+                        <label for="inputEmail" class="sr-only">Email address</label>
+                        <input type="email" id="inputEmail" class="form-control" placeholder="Email address" required autofocus>
+                        <label for="inputPassword" class="sr-only">Password</label>
+                        <input type="password" id="inputPassword" class="form-control" placeholder="Password" required>
+                        <div class="checkbox mb-3">
+                          <label>
+                            <input type="checkbox" value="remember-me"> Remember me
+                          </label>
+                        </div>
+                        <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
+                      </form>
+                    </div>
+                  <section>
+                  <footer style="background: #a13941;color: #e9ecef;" >
+                    <div class="container"><small>${companyName} 2020</small></div>
+                  </footer>
+                </body>
+                </html>
+              mode: '000600'
+              owner: apache
+              group: apache
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PUBSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSGT
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource appServerT --region ${AWS::Region}
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource appServerT --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: Web-App-Test
+        - Key: Function
+          Value: App
+        - Key: Application
+          Value: Accounts Payable
+        - Key: Environment
+          Value: Test
+  ##AWS Backup Resources
+  BackupVault:
+    Type: AWS::Backup::BackupVault
+    Properties:
+      BackupVaultName: Lab-Vault
+
+Outputs:
+  labRegion:
+    Description: The Region that your Lab is running in
+    Value: !Ref AWS::Region

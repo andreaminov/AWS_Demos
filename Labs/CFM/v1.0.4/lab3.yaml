@@ -1,0 +1,1305 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: network and instances with scripts to force a load on them.
+Parameters:
+  companyName:
+    Description: Name of your company
+    Type: String
+    Default: Example Corp
+  companyAbbr:
+    Description: Abbreviaion of your company 
+    Type: String
+    Default: Lab
+  dbRootPassword:
+    Description: the database root password
+    Type: String
+    NoEcho: true
+    Default: lab-Password!
+  dbServicePassword:
+    Description: the database application service password
+    Type: String
+    NoEcho: true
+    Default: labPassword!
+  instanceType:
+    Description: Instance type for AP server
+    Type: String
+    Default: m4.2xlarge
+    AllowedValues:
+      - t2.micro
+      - t3.medium
+      - c5.large
+      - m4.2xlarge
+      - m5.large
+  latestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  TWBPDBmemUsage:
+    Type: String
+    Default: "20"
+    Description: The amount of memory in gb that will be used on the Team With Best Practices DB server
+  TWBPAppMemUsage:
+    Type: String
+    Default: "17"
+    Description: The amount of memory in gb that will be used on the Team With Best Practices App server
+  TWBPAppCpuUsage:
+    Type: String
+    Default: "5"
+    Description: The amount of CPU to fully utilize on the Team With Best Practices App server
+  TWBPDBcpuUsage:
+    Type: String
+    Default: "4"
+    Description: The amount of CPU to fully utilize on the Team With Best Practices DB server  
+  LSAppCpuUsage:
+    Type: String
+    Default: "2"
+    Description: The amount of CPU to fully utilize on the Lift and Shift App server 
+  LSAppMemUsage:
+    Type: String
+    Default: "10"
+    Description: The amount of memory in gb that will be used on the Lift and Shift App server
+  LSDBmemUsage:
+    Type: String
+    Default: "28"
+    Description: The amount of memory in gb that will be used on the Lift and Shift DB server
+  LSDBcpuUsage:
+    Type: String
+    Default: "6"
+    Description: The amount of CPU to fully utilize on the Lift and Shift DB server
+
+Resources:
+  ##Network Resources
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/21
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - VPC
+  PUBSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Pub-a
+  PUBSUBNETb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Pub-b
+  PRIVSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/23
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Priv-a
+  PRIVSUBNETb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/23
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Priv-b
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - IGW
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+  NGWaEIP:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewaya:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NGWaEIP.AllocationId
+      SubnetId: !Ref PUBSUBNETa
+  NGWbEIP:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewayb:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NGWbEIP.AllocationId
+      SubnetId: !Ref PUBSUBNETb
+  PUBRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - public-RT
+  PUBRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETa
+      RouteTableId: !Ref PUBRT
+  PUBRTASSOCb:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETb
+      RouteTableId: !Ref PUBRT
+  IGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PUBRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  PRIVRTa:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - private-RTa
+  PRIVRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETa
+      RouteTableId: !Ref PRIVRTa
+  NGWRoutea:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PRIVRTa
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewaya
+  PRIVRTb:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - private-RTb
+  PRIVRTASSOCb:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETb
+      RouteTableId: !Ref PRIVRTb
+  NGWRouteb:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PRIVRTb
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayb
+  ##IAM Resources
+  ###Roles for the instances to talk to SSM and Cloudwatch
+  APPSERVERROLE: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Path: "/"
+  APPSERVERINSTANCEPROFILE: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "APPSERVERROLE"
+  SQLSERVERROLE: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Path: "/"
+  SQLSERVERINSTANCEPROFILE: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "SQLSERVERROLE"
+  ##ReadOnly group for student
+  ReadOnlyGroup:
+      Type: "AWS::IAM::Group"
+      Properties:
+        GroupName: QLReadOnly
+        ManagedPolicyArns: [ "arn:aws:iam::aws:policy/ReadOnlyAccess" ]
+  GroupAssignment:
+      Type: "AWS::IAM::UserToGroupAddition"
+      DependsOn: ReadOnlyGroup
+      Properties:
+        GroupName: QLReadOnly
+        Users:
+          - awsstudent
+  ##admin user for testing purposes only, remove for prod
+  ##testadmin:
+  ##  Type: 'AWS::IAM::User'
+  ##  Properties:
+  ##    UserName: admin1
+  ##    LoginProfile:
+  ##      Password: Passw0rd1
+  ##    Policies:
+  ##      - PolicyName: testadmin
+  ##        PolicyDocument:
+  ##          Version: 2012-10-17
+  ##          Statement:
+  ##            - Effect: Allow
+  ##              Action: '*'
+  ##              Resource: '*'
+  ##Parameter for SSM CWA Configuration
+  CWAconfig:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: AmazonCloudWatch-AgentConfig
+      Value: |
+        {
+          "agent": {
+            "metrics_collection_interval": 15,
+            "run_as_user": "root"
+          },
+          "metrics": {
+            "namespace": "MemoryUsage",
+            "append_dimensions":{ 
+              "InstanceId":"${aws:InstanceId}"},
+              "metrics_collected": {
+                "mem": {
+                  "measurement": [
+                    "mem_used_percent"
+                  ],
+                  "metrics_collection_interval": 15
+                }
+              }
+            }
+          }
+      Type: String
+  ##EC2 Prod Resources
+  ###Security Group for app server allowing http from internet
+  APPSGTWBP:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP App Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-TWBP-SG
+  allowHTTP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt APPSGTWBP.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  ###App Server with httpd, php and light website
+  TWBPappServer:
+    Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          default:
+            - 01_setup
+            - 02_config-amazon-cloudwatch-agent
+            - 03_restart_amazon-cloudwatch-agent
+          UpdateEnvironment:
+            - 02_config-amazon-cloudwatch-agent
+            - 03_restart_amazon-cloudwatch-agent
+        02_config-amazon-cloudwatch-agent:
+          files:
+            /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json:
+              content: !Sub |
+                {
+                    "agent": {
+                        "metrics_collection_interval": 15,
+                        "run_as_user": "root"
+                        },
+                    "metrics": {
+                        "namespace": "MemoryUsage",
+                        "append_dimensions":{ 
+                            "InstanceId":"${!aws:InstanceId}"},
+                        "metrics_collected": {
+                            "mem": {
+                                    "measurement": [
+                                            "mem_used_percent"
+                                    ],
+                                    "metrics_collection_interval": 15
+                                    }
+                        }
+                    }
+                }
+              mode: '000400'
+              owner: root
+              group: root
+        # Invoke amazon-cloudwatch-agent-ctl to restart the AmazonCloudWatchAgent.
+        03_restart_amazon-cloudwatch-agent:
+          commands:
+            01_stop_service:
+              command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a stop
+            02_start_service:
+              command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+        01_setup:
+          packages:
+            rpm:
+              epel: "https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm"
+            yum:
+              httpd: []
+              php: []
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <title>The Model Web App</title>
+                </head>
+                <body>
+                  <h1>The Model Web App</h1>
+                  <small>${companyName} 2020</small>
+                </body>
+                </html>
+              mode: '000600'
+              owner: apache
+              group: apache
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=1
+              mode: '000400'
+              owner: root
+              group: root
+            /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json:
+              content: !Sub |
+                {
+                    "agent": {
+                        "metrics_collection_interval": 15,
+                        "run_as_user": "root"
+                        },
+                    "metrics": {
+                        "namespace": "MemoryUsage",
+                        "append_dimensions":{ 
+                            "InstanceId":"${!aws:InstanceId}"},
+                        "metrics_collected": {
+                            "mem": {
+                                    "measurement": [
+                                            "mem_used_percent"
+                                    ],
+                                    "metrics_collection_interval": 15
+                                    }
+                        }
+                    }
+                }
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.TWBPappServer.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource TWBPappServer --region ${AWS::Region} --configsets UpdateEnvironment
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+            /stress/mem_stress.py:
+              content: !Sub |
+                import argparse
+                import time
+
+                GB = 1024 * 1024 * 1024
+
+                def parse_cmd_args():
+                    """
+                    Parses command line args
+                    """
+                    parser = argparse.ArgumentParser(description='Memory Eating utility for python')
+                    parser.add_argument('-m', '--memory', type=int, default=-1, help='The amount of memory in gigs to eat', required = True)
+                    args = parser.parse_args()
+                    return args
+
+                def eat_memory(mem_to_eat):
+                    """
+                    Eats memeory
+                    :param mem_to_eat: The amount of memory to eat in gigs
+                    """
+                    global GB
+                    eat = "a" * GB * mem_to_eat
+                    while True:
+                        time.sleep(1)
+
+                def main():
+                    """
+                    Main sentinel
+                    """
+                    mem_to_eat = parse_cmd_args().memory
+                    eat_memory(mem_to_eat)
+
+                if __name__ == "__main__":
+                    main()
+            /etc/systemd/system/mem_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=Memory Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/usr/bin/python /stress/mem_stress.py -m ${TWBPAppMemUsage}
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+            /stress/cpu_stress.sh:
+              content: !Sub |
+                #!/bin/sh
+                stress -c ${TWBPAppCpuUsage}
+            /etc/systemd/system/cpu_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=CPU Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/bin/sh /stress/cpu_stress.sh
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+          services:
+            sysvinit:
+              cpu_stress:
+                enabled: 'true'
+                ensureRunning: 'true'
+              mem_stress:
+                enabled: 'true'
+                ensureRunning: 'true'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref APPSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PUBSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSGTWBP
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2 epel
+            yum update -y aws-cfn-bootstrap
+            yum install stress -y
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource TWBPappServer --region ${AWS::Region} --configsets default
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource TWBPappServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: Model-Web-Server
+        - Key: Function
+          Value: App
+        - Key: Application
+          Value: Model Web Application
+        - Key: Environment
+          Value: Production
+        - Key: Department
+          Value: Finance
+        - Key: Backup
+          Value: Model-Web-Application
+  ###Security Group for mariadb server allowing 3306 from appsg
+  DBSGTWBP:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP SQL Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SQL-TWBP-SG
+  allowMySQL:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt DBSGTWBP.GroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !GetAtt APPSGTWBP.GroupId
+  ###mariadb server with database and mock app data
+  TWBPSQLServer:
+    Type: AWS::EC2::Instance
+    DependsOn: NGWRoutea
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          InstallAndSecure:
+            - Install
+            - Secure
+            - Configure
+            - restart_amazon-cloudwatch-agent
+        restart_amazon-cloudwatch-agent:
+          commands:
+            01_stop_service:
+              command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a stop
+            02_start_service:
+              command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+        Install:
+          packages:
+            rpm:
+              epel: "https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm"
+            yum:
+              mariadb-server: []
+          files:
+            /tmp/secure.sql:
+              content: !Sub |
+                UPDATE mysql.user SET Password=PASSWORD('${dbRootPassword}') WHERE User='root';
+                DELETE FROM mysql.user WHERE User='';
+                DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+                DROP DATABASE IF EXISTS test;
+                DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+                FLUSH PRIVILEGES;
+            /tmp/ap_install.sql:
+              content: !Sub |
+                CREATE DATABASE APDB;
+                CREATE USER 'ap_service'@'%' IDENTIFIED BY '${dbServicePassword}';
+                GRANT ALL PRIVILEGES ON APDB.* TO 'ap_service'@'%';
+                CREATE TABLE APDB.customers 
+                (id INT NOT NULL AUTO_INCREMENT KEY, 
+                first VARCHAR(254),
+                last VARCHAR(254), 
+                addr VARCHAR(254), 
+                city VARCHAR(254), 
+                state VARCHAR(254), 
+                zip VARCHAR(254),
+                accountNumber INT(9) ZEROFILL NOT NULL 
+                );
+
+                CREATE TABLE APDB.transactions
+                (id INT NOT NULL AUTO_INCREMENT KEY,
+                accountNumber INT(8) ZEROFILL NOT NULL,
+                credit BOOLEAN,
+                amount DECIMAL,
+                trans_date DATE,
+                trans_time TIME
+                );
+              mode: '000400'
+              owner: root
+              group: root
+            /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json:
+              content: !Sub |
+                {
+                    "agent": {
+                        "metrics_collection_interval": 15,
+                        "run_as_user": "root"
+                        },
+                    "metrics": {
+                        "namespace": "MemoryUsage",
+                        "append_dimensions":{ 
+                            "InstanceId":"${!aws:InstanceId}"},
+                        "metrics_collected": {
+                            "mem": {
+                                    "measurement": [
+                                            "mem_used_percent"
+                                    ],
+                                    "metrics_collection_interval": 15
+                                    }
+                        }
+                    }
+                }
+              mode: '000400'
+              owner: root
+              group: root
+            /stress/mem_stress.py:
+              content: !Sub |
+                import argparse
+                import time
+
+                GB = 1024 * 1024 * 1024
+
+                def parse_cmd_args():
+                    """
+                    Parses command line args
+                    """
+                    parser = argparse.ArgumentParser(description='Memory Eating utility for python')
+                    parser.add_argument('-m', '--memory', type=int, default=-1, help='The amount of memory in gigs to eat', required = True)
+                    args = parser.parse_args()
+                    return args
+
+                def eat_memory(mem_to_eat):
+                    """
+                    Eats memeory
+                    :param mem_to_eat: The amount of memory to eat in gigs
+                    """
+                    global GB
+                    eat = "a" * GB * mem_to_eat
+                    while True:
+                        time.sleep(1)
+
+                def main():
+                    """
+                    Main sentinel
+                    """
+                    mem_to_eat = parse_cmd_args().memory
+                    eat_memory(mem_to_eat)
+
+                if __name__ == "__main__":
+                    main()
+            /etc/systemd/system/mem_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=Memory Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/usr/bin/python /stress/mem_stress.py -m ${TWBPDBmemUsage}
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+            /stress/cpu_stress.sh:
+              content: !Sub |
+                #!/bin/sh
+                stress -c ${TWBPDBcpuUsage}
+            /etc/systemd/system/cpu_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=CPU Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/bin/sh /stress/cpu_stress.sh
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              mariadb:
+                enabled: 'true'
+                ensureRunning: 'true'
+          commands:
+            restart_sysdaemon:
+              command: !Sub |
+                systemctl daemon-reload
+        Secure:
+          commands:
+            01_set_mysql_root_password:
+              command: !Sub |
+                mysql --user=root < /tmp/secure.sql
+        Configure:
+          commands:
+            configure_AP_DB:
+                command: !Sub |
+                  mysql --user=root --password=${dbRootPassword} < /tmp/ap_install.sql
+          services:
+            sysvinit:
+              mem_stress:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cpu_stress:
+                enabled: 'true'
+                ensureRunning: 'true'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref SQLSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PRIVSUBNETa
+      SecurityGroupIds: 
+        - !Ref DBSGTWBP
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -ex
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2 epel
+            yum update -y aws-cfn-bootstrap
+            yum install stress -y
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource TWBPSQLServer --region ${AWS::Region} \
+            --configsets InstallAndSecure
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource TWBPSQLServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: Model-DB-Server
+        - Key: Function
+          Value: SQL
+        - Key: Application
+          Value: Model Web Application
+        - Key: Department
+          Value: Finance
+        - Key: Environment
+          Value: Production
+        - Key: Backup
+          Value: Model-Web-Application
+  ##EC2 Lift and Shift Resources
+  ###Security Group for app server allowing http from internet
+  APPSGLS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP Lift and App Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-LS-SG
+  allowHTTPT:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt APPSGLS.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  ###App Server with httpd, php and light website
+  AppServerLS:
+    Type: AWS::EC2::Instance
+    DependsOn: [AttachGateway,TWBPappServer]
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+              yum:
+                httpd: []
+                php: []
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <title>The Web Application</title>
+                </head>
+                <body>
+                  <h1>The Web Application</h1>
+                  <small>${companyName} 2020</small>
+                </body>
+                </html>
+              mode: '000600'
+              owner: apache
+              group: apache
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.AppServerLS.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource AppServerLS --region ${AWS::Region} --configsets UpdateEnvironment
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+            /stress/mem_stress.py:
+              content: !Sub |
+                import argparse
+                import time
+
+                GB = 1024 * 1024 * 1024
+
+                def parse_cmd_args():
+                    """
+                    Parses command line args
+                    """
+                    parser = argparse.ArgumentParser(description='Memory Eating utility for python')
+                    parser.add_argument('-m', '--memory', type=int, default=-1, help='The amount of memory in gigs to eat', required = True)
+                    args = parser.parse_args()
+                    return args
+
+                def eat_memory(mem_to_eat):
+                    """
+                    Eats memeory
+                    :param mem_to_eat: The amount of memory to eat in gigs
+                    """
+                    global GB
+                    eat = "a" * GB * mem_to_eat
+                    while True:
+                        time.sleep(1)
+
+                def main():
+                    """
+                    Main sentinel
+                    """
+                    mem_to_eat = parse_cmd_args().memory
+                    eat_memory(mem_to_eat)
+
+                if __name__ == "__main__":
+                    main()
+            /etc/systemd/system/mem_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=Memory Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/usr/bin/python /stress/mem_stress.py -m ${LSAppMemUsage}
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+            /stress/cpu_stress.sh:
+              content: !Sub |
+                #!/bin/sh
+                stress -c ${LSAppCpuUsage}
+            /etc/systemd/system/cpu_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=CPU Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/bin/sh /stress/cpu_stress.sh
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+          services:
+            sysvinit:
+              cpu_stress:
+                enabled: 'true'
+                ensureRunning: 'true'
+              mem_stress:
+                enabled: 'true'
+                ensureRunning: 'true'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref APPSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PUBSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSGLS
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2 epel
+            yum update -y aws-cfn-bootstrap
+            yum install stress -y
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource AppServerLS --region ${AWS::Region} --configsets default
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource AppServerLS --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: Web-Server
+        - Key: Function
+          Value: App
+        - Key: Application
+          Value: Web Application
+        - Key: Department
+          Value: Finance
+        - Key: Environment
+          Value: Production
+        - Key: Backup
+          Value: Web-Application
+  ###Security Group for mariadb server allowing 3306 from appsg
+  DBSGLS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Lift and Shift AP SQL Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SQL-LS-SG
+  allowMySQLT:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt DBSGLS.GroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !GetAtt APPSGLS.GroupId
+  ###mariadb server with database and mock app data
+  LSSQLServer:
+    Type: AWS::EC2::Instance
+    DependsOn: [NGWRoutea, TWBPSQLServer]
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          InstallAndSecure:
+            - Install
+            - Secure
+            - Configure
+        Install:
+          packages:
+            yum:
+              mariadb-server: []
+          files:
+            /tmp/secure.sql:
+              content: !Sub |
+                UPDATE mysql.user SET Password=PASSWORD('${dbRootPassword}') WHERE User='root';
+                DELETE FROM mysql.user WHERE User='';
+                DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+                DROP DATABASE IF EXISTS test;
+                DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+                FLUSH PRIVILEGES;
+              mode: '000400'
+              owner: root
+              group: root
+            /tmp/ap_install.sql:
+              content: !Sub |
+                CREATE DATABASE APDB;
+                CREATE USER 'ap_service'@'%' IDENTIFIED BY '${dbServicePassword}';
+                GRANT ALL PRIVILEGES ON APDB.* TO 'ap_service'@'%';
+                CREATE TABLE APDB.customers 
+                (id INT NOT NULL AUTO_INCREMENT KEY, 
+                first VARCHAR(254),
+                last VARCHAR(254), 
+                addr VARCHAR(254), 
+                city VARCHAR(254), 
+                state VARCHAR(254), 
+                zip VARCHAR(254),
+                accountNumber INT(9) ZEROFILL NOT NULL 
+                );
+
+                CREATE TABLE APDB.transactions
+                (id INT NOT NULL AUTO_INCREMENT KEY,
+                accountNumber INT(8) ZEROFILL NOT NULL,
+                credit BOOLEAN,
+                amount DECIMAL,
+                trans_date DATE,
+                trans_time TIME
+                );
+              mode: '000400'
+              owner: root
+              group: root
+            /stress/mem_stress.py:
+              content: !Sub |
+                import argparse
+                import time
+
+                GB = 1024 * 1024 * 1024
+
+                def parse_cmd_args():
+                    """
+                    Parses command line args
+                    """
+                    parser = argparse.ArgumentParser(description='Memory Eating utility for python')
+                    parser.add_argument('-m', '--memory', type=int, default=-1, help='The amount of memory in gigs to eat', required = True)
+                    args = parser.parse_args()
+                    return args
+
+                def eat_memory(mem_to_eat):
+                    """
+                    Eats memeory
+                    :param mem_to_eat: The amount of memory to eat in gigs
+                    """
+                    global GB
+                    eat = "a" * GB * mem_to_eat
+                    while True:
+                        time.sleep(1)
+
+                def main():
+                    """
+                    Main sentinel
+                    """
+                    mem_to_eat = parse_cmd_args().memory
+                    eat_memory(mem_to_eat)
+
+                if __name__ == "__main__":
+                    main()
+            /lib/systemd/system/mem_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=Memory Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/usr/bin/python /stress/mem_stress.py -m ${LSDBmemUsage}
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+            /stress/cpu_stress.sh:
+              content: !Sub |
+                #!/bin/sh
+                stress -c ${LSDBcpuUsage}
+            /etc/systemd/system/cpu_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=CPU Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/bin/sh /stress/cpu_stress.sh
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              mariadb:
+                enabled: 'true'
+                ensureRunning: 'true'
+          commands:
+            restart_sysdaemon:
+              command: !Sub |
+                systemctl daemon-reload
+        Secure:
+          commands:
+            01_set_mysql_root_password:
+              command: !Sub |
+                mysql --user=root < /tmp/secure.sql
+        Configure:
+          commands:
+            configure_AP_DB:
+                command: !Sub |
+                  mysql --user=root --password=${dbRootPassword} < /tmp/ap_install.sql
+          services:
+            sysvinit:
+              mem_stress:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cpu_stress:
+                enabled: 'true'
+                ensureRunning: 'true'  
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref SQLSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PRIVSUBNETa
+      SecurityGroupIds: 
+        - !Ref DBSGLS
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -ex
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2 epel
+            yum update -y aws-cfn-bootstrap
+            yum install stress -y
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource LSSQLServer --region ${AWS::Region} \
+            --configsets InstallAndSecure
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource LSSQLServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: DB-Server
+        - Key: Function
+          Value: SQL
+        - Key: Application
+          Value: Web Application
+        - Key: Department
+          Value: Finance
+        - Key: Environment
+          Value: Production
+        - Key: Backup
+          Value: Web-Application
+  CWDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    DependsOn: [TWBPSQLServer,TWBPappServer]
+    Properties:
+      DashboardName: EC2_Metric_Comparison
+      DashboardBody: !Sub >-
+        {
+        "start": "-PT9H",
+        "periodOverride": "inherit",
+        "widgets": [
+          {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 8,
+              "properties": {
+                "metrics": [
+                    [ "AWS/EC2", "CPUUtilization", "InstanceId", "${TWBPappServer}"],
+                    [ "...", "${TWBPSQLServer}"],
+                    [ "...", "${AppServerLS}"],
+                    [ "...", "${LSSQLServer}"]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "stat": "Average",
+                "period": 30,
+                "yAxis":{
+                    "left": {
+                        "min": 0,
+                        "max": 100,
+                        "showUnits": false
+                            }
+                        },
+                "title": "EC2 CPU Usage"
+            }},
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 8,
+              "properties": {
+                "metrics": [
+                  [ "MemoryUsage", "mem_used_percent", "InstanceId", "${TWBPappServer}"],
+                  [ "...", "${TWBPSQLServer}"]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "stat": "Average",
+                "period": 30,
+                "yAxis": {
+                  "left": {
+                    "min": 0,
+                    "max": 100,
+                    "showUnits": false
+                        }
+                    },
+                "title": "EC2 Memory Usage"
+              }
+          }]}
+Outputs:
+  labRegion:
+    Description: The Region that your Lab is running in
+    Value: !Ref AWS::Region

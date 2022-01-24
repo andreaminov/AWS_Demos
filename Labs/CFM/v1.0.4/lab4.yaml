@@ -1,0 +1,941 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Resources for Lab 5
+Parameters:
+  companyAbbr:
+    Description: Abbreviaion of your company 
+    Type: String
+    Default: Lab
+  instanceType:
+    Description: Instance type for AP server
+    Type: String
+    Default: c5.4xlarge
+    AllowedValues:
+      - t2.micro
+      - t3.medium
+      - c5.large
+      - c5.4xlarge
+      - m5.large
+  latestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+
+Resources:
+  ##Network Resources
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/21
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: Lab-VPC
+  PUBSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: Lab-public-a
+  PUBSUBNETb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      Tags:
+        - Key: Name
+          Value: Lab-public-b
+  PRIVSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/23
+      Tags:
+        - Key: Name
+          Value: Lab-private-a
+  PRIVSUBNETb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/23
+      Tags:
+        - Key: Name
+          Value: Lab-private-b
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Lab-IGW
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+  NGWaEIP:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewaya:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NGWaEIP.AllocationId
+      SubnetId: !Ref PUBSUBNETa
+  NGWbEIP:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewayb:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NGWbEIP.AllocationId
+      SubnetId: !Ref PUBSUBNETb
+  PUBRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  Lab-public-RT
+  PUBRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETa
+      RouteTableId: !Ref PUBRT
+  PUBRTASSOCb:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETb
+      RouteTableId: !Ref PUBRT
+  IGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PUBRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  PRIVRTa:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  Lab-private-RTa
+  PRIVRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETa
+      RouteTableId: !Ref PRIVRTa
+  NGWRoutea:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PRIVRTa
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewaya
+  PRIVRTb:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  Lab-private-RTb
+  PRIVRTASSOCb:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETb
+      RouteTableId: !Ref PRIVRTb
+  NGWRouteb:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PRIVRTb
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayb
+  ##IAM Resources
+  ###Roles for the instances to talk to SSM
+  AppServerPermissions: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+  APPSERVERINSTANCEPROFILE: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      InstanceProfileName: !Ref AppServerPermissions
+      Roles: 
+        - 
+          Ref: AppServerPermissions
+  dynamodbPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: portalTableAccess
+      Roles:
+        - !Ref AppServerPermissions
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:PutItem
+              - dynamodb:GetItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:DeleteItem
+              - dynamodb:Scan
+              - dynamodb:Query
+              - dynamodb:UpdateItem
+            Resource: 
+              - !GetAtt portalTable.Arn
+              - !GetAtt portalSessionsTable.Arn
+  s3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: s3BucketAccess
+      Roles:
+        - !Ref AppServerPermissions
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:*
+            Resource: '*'
+  STSPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: AssumeRole
+      Roles:
+        - !Ref AppServerPermissions
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Resource: '*'            
+  ###########
+    # ReadOnly group for student
+  ###########
+  ReadOnlyGroup:
+      Type: "AWS::IAM::Group"
+      Properties:
+        GroupName: QLReadOnly
+        ManagedPolicyArns: [ "arn:aws:iam::aws:policy/ReadOnlyAccess" ]
+  GroupAssignment:
+      Type: "AWS::IAM::UserToGroupAddition"
+      DependsOn: ReadOnlyGroup
+      Properties:
+        GroupName: QLReadOnly
+        Users:
+          - awsstudent  
+  ###S3 Resources###
+  generatedBucket:
+    Type: AWS::S3::Bucket
+  ##EC2 Prod Resources
+  ###Security Group for app server allowing http from internet
+  ALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Application Load Balancer
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: ALB-SG
+  APPSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP App Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SG
+  allowHTTP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow traffic from www in to ALB
+      GroupId: !GetAtt ALBSG.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  allowHTTPS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow HTTPS traffic from www in to ALB
+      GroupId: !GetAtt ALBSG.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+  allowHTTPfromALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow http traffic from ALB in to EC2 instances
+      GroupId: !GetAtt APPSG.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !GetAtt ALBSG.GroupId
+  allowHTTPSfromALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow http traffic from ALB in to EC2 instances
+      GroupId: !GetAtt APPSG.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !GetAtt ALBSG.GroupId
+  SSMSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Session Manager Endpoint in Challenge
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SG
+  allowHTTPSforSSMEndpoint:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow http traffic from appServer in SSM Endpoint
+      GroupId: !GetAtt SSMSG.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !GetAtt VPC.CidrBlock
+  ###App Server with httpd, php and light website
+  appServer1:
+    Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+              php-xml: []
+          files:
+            /var/www/html/Session-data.php:
+              content: 
+                Fn::Sub:
+                  - |
+                    <?php
+                    require 'vendor/autoload.php';
+                    use Aws\DynamoDb\SessionHandler;
+                    use Aws\DynamoDb\DynamoDbClient;
+                    $dynamoDb = new DynamoDbClient([
+                      'region' => '${AWS::Region}',
+                      'version' => 'latest'
+                    ]);
+                    try {
+                      $sessionHandler = SessionHandler::fromClient($dynamoDb, [
+                        'table_name' => '${portalSessionsTable}',
+                        'session_lifetime' => 3600
+                      ]);
+                      $sessionHandler->register();
+                      $dbArn = '${portalTableArn}';
+                      $dbName = '${portalTable}';
+                      session_start();
+                      $_SESSION['dbArn'] = $dbArn;
+                      $_SESSION['dbName'] = $dbName;
+                      session_write_close();
+                    } catch (Exception $e) {
+                      echo 'Caught exception: ', $e->getMessage(), \n;
+                    }
+                    ?>
+                  - portalTableArn: !GetAtt portalTable.Arn
+              mode: '000600'
+              owner: apache
+              group: apache
+            /var/www/html/dynamic/dynamodb-scan.php:
+              content: !Sub |
+                    <?php
+                    require 'vendor/autoload.php';
+                    use Aws\DynamoDb\Exception\DynamoDbException;
+                    use Aws\DynamoDb\DynamoDbClient;
+                    use Aws\DynamoDb\Marshaler;
+                    try{
+                      $dynamodb = new DynamoDbClient([
+                      'region' => '${AWS::Region}',
+                      'version' => 'latest',
+                      'retries' => 0,
+                      'http'    => [
+                        'timeout' => 5
+                        ]
+                      ]);
+                      $marshal = new Marshaler();
+                      $params = ['TableName' => '${portalTable}'];
+                      $result = $dynamodb->scan($params);
+                      echo '<table class="tg table table-bordered table-secondary table-hover"><thead><tr><th class="mb-0">ID</th><th class="mb-0">Name</th><th class="mb-0">Invoice #</th><th class="mb-0">Invoice Amount ($)</th></tr></thead><tbody>';
+                      foreach ($result['Items'] as $i) {
+                        $data = $marshal->unmarshalItem($i);
+                        echo "<tr><td>" . $data['imageKey'] . "</td><td>" . $data['Name'] . "</td><td>" . $data['InvoiceNumber'] . "</td><td>" . $data['InvoiceAmount'] . "</td></tr>";
+                      }
+                      echo "</tbody></table>";
+                    } catch (DynamoDbException $d) {
+                    echo  '<div class="text-center"><h4 class = "page-section-heading text-danger">DynamoDB connection failure!</h4></div>';
+                    } catch (Exception $e) {
+                    echo  '<div class="text-center"><h4 class = "page-section-heading text-danger">DynamoDB connection failure!</h4></div>';
+                    }
+                    ?>
+              mode: '000600'
+              owner: apache
+              group: apache 
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.appServer1.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource appServer1 --region ${AWS::Region}
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+          commands:
+            01_install_composer:
+              command:
+                export HOME=/root && export COMPOSER_HOME=/root && curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/bin/composer && chmod +x /usr/bin/composer && export COMPOSER_HOME=/root
+            02_install_aws-php-sdk:
+              command:
+                export COMPOSER_HOME=/home/user/app/cache/composer/ && cd /var/www/html && composer require ext-simplexml && composer require aws/aws-sdk-php
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref APPSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PRIVSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSG
+      UserData: 
+        Fn::Base64:
+          !Sub 
+          - | 
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource appServer1 --region ${AWS::Region}
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource appServer1 --region ${AWS::Region}
+            # Download and unzip webApp files using cli
+            aws s3 cp ${webFileLocation} .
+            unzip -d /var/www/html APwebApp.zip 
+          - { webFileLocation: !Sub "s3://${AWS::Region}-tcprod/courses/ILT-TF-200-CMCFTE/v1.0.4/lab-4-network/instructions/scripts/APwebApp.zip"}
+      Tags:
+        - Key: Name
+          Value: WebApp-Server-1
+        - Key: Application
+          Value: Customer Portal
+        - Key: Department
+          Value: Customer Relations
+        - Key: Environment
+          Value: Prod
+        - Key: Backup
+          Value: Portal-Prod
+  appServer2:
+    Type: AWS::EC2::Instance
+    DependsOn: [AttachGateway, portalTable]
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+              php-xml: []
+          files:
+            /var/www/html/Session-data.php:
+              content: 
+                Fn::Sub:
+                  - |
+                    <?php
+                    require 'vendor/autoload.php';
+                    use Aws\DynamoDb\SessionHandler;
+                    use Aws\DynamoDb\DynamoDbClient;
+                    $dynamoDb = new DynamoDbClient([
+                      'region' => '${AWS::Region}',
+                      'version' => 'latest'
+                    ]);
+                    try {
+                      $sessionHandler = SessionHandler::fromClient($dynamoDb, [
+                        'table_name' => '${portalSessionsTable}',
+                        'session_lifetime' => 3600
+                      ]);
+                      $sessionHandler->register();
+                      $dbArn = '${portalTableArn}';
+                      $dbName = '${portalTable}';
+                      session_start();
+                      $_SESSION['dbArn'] = $dbArn;
+                      $_SESSION['dbName'] = $dbName;
+                      session_write_close();
+                    } catch (Exception $e) {
+                      echo 'Caught exception: ', $e->getMessage(), \n;
+                    }
+                    ?>
+                  - portalTableArn: !GetAtt portalTable.Arn
+              mode: '000600'
+              owner: apache
+              group: apache
+            /var/www/html/dynamic/dynamodb-scan.php:
+              content: !Sub |
+                    <?php
+                    require 'vendor/autoload.php';
+                    use Aws\DynamoDb\Exception\DynamoDbException;
+                    use Aws\DynamoDb\DynamoDbClient;
+                    use Aws\DynamoDb\Marshaler;
+                    try{
+                      $dynamodb = new DynamoDbClient([
+                      'region' => '${AWS::Region}',
+                      'version' => 'latest',
+                      'retries' =>0,
+                      'http'    => [
+                        'timeout' => 5
+                        ]
+                      ]);
+                      $marshal = new Marshaler();
+                      $params = ['TableName' => '${portalTable}'];
+                      $result = $dynamodb->scan($params);
+                      echo '<table class="tg table table-bordered table-secondary table-hover"><thead><tr><th class="mb-0">ID</th><th class="mb-0">Name</th><th class="mb-0">Invoice #</th><th class="mb-0">Invoice Amount ($)</th></tr></thead><tbody>';
+                      foreach ($result['Items'] as $i) {
+                        $data = $marshal->unmarshalItem($i);
+                        echo "<tr><td>" . $data['imageKey'] . "</td><td>" . $data['Name'] . "</td><td>" . $data['InvoiceNumber'] . "</td><td>" . $data['InvoiceAmount'] . "</td></tr>";
+                      }
+                      echo "</tbody></table>";
+                    } catch (DynamoDbException $d) {
+                    echo  '<div class="text-center"> <h4 class = "page-section-heading text-danger">DynamoDB connection failure!</h4></div>';
+                    }catch (Exception $e) {
+                    echo  '<div class="text-center"> <h4 class = "page-section-heading text-danger">DynamoDB connection failure!</h4></div>';
+                    }
+                    ?>
+              mode: '000600'
+              owner: apache
+              group: apache  
+            /var/www/dynamodb_data.json:
+              content: !Sub |
+                    {   
+                      "${portalTable}" : [
+                          {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey":{
+                                  "S": "0"
+                                },
+                                "Name": { 
+                                  "S": "Alejandro Rosalez"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "2005"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "109928"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey":{
+                                  "S": "1"
+                                },
+                                "Name": { 
+                                  "S": "Ana Carolina Silva"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "2006"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "1090"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey":{ 
+                                  "S": "2"
+                                },
+                                "Name": { 
+                                  "S": "Arnav Desai"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "205"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "99817"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey":{
+                                  "S": "3"
+                                },
+                                "Name": { 
+                                  "S": "Carlos Salazar"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "1205"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "750"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey":{ 
+                                  "S": "4"
+                                },
+                                "Name": { 
+                                  "S": "Diego Ramirez"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "2"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "18"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey":{ 
+                                  "S": "5"
+                                },
+                                "Name": { 
+                                  "S": "Jane Doe"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "287"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "10000000"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey":{ 
+                                  "S": "6"
+                                },
+                                "Name": { 
+                                  "S": "Jane Roe"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "5"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "1098"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey": {
+                                  "S": "7"
+                                },
+                                "Name": { 
+                                  "S": "John Doe"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "39"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "19918"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey": {
+                                  "S": "8"
+                                },
+                                "Name": { 
+                                  "S": "John Stiles"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "2271"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "1"
+                                }
+                            }
+                          }
+                        },
+                        {
+                                "PutRequest": {
+                                    "Item": {
+                                "imageKey": {
+                                  "S": "9"
+                                },
+                                "Name": { 
+                                  "S": "Jorge Souza"
+                                },
+                                "InvoiceNumber" : {
+                                  "N": "99972"
+                                },
+                                "InvoiceAmount" : {
+                                  "N": "0"
+                                }
+                            }
+                          }
+                        }
+                      ]
+                    }
+              mode: '000400'
+              owner: root
+              group: root        
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.appServer2.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource appServer2 --region ${AWS::Region}
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+          commands:
+            01_install_composer:
+              command:
+                export HOME=/root && export COMPOSER_HOME=/root && curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/bin/composer && chmod +x /usr/bin/composer && export COMPOSER_HOME=/root
+            02_install_aws-php-sdk:
+              command:
+                export COMPOSER_HOME=/home/user/app/cache/composer/ && cd /var/www/html && composer require ext-simplexml && composer require aws/aws-sdk-php
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref APPSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PRIVSUBNETb
+      SecurityGroupIds: 
+        - !Ref APPSG
+      UserData: 
+        Fn::Base64:
+          !Sub 
+          - |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource appServer2 --region ${AWS::Region}
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource appServer2 --region ${AWS::Region}
+            # Load DynamoDB
+            aws dynamodb --region ${AWS::Region} batch-write-item --request-items file:///var/www/dynamodb_data.json
+            # Load Web App Files
+            aws s3 cp ${webFileLocation} .
+            unzip -d /var/www/html APwebApp.zip 
+          - { webFileLocation: !Sub "s3://${AWS::Region}-tcprod/courses/ILT-TF-200-CMCFTE/v1.0.4/lab-4-network/instructions/scripts/APwebApp.zip"}
+      Tags:
+        - Key: Name
+          Value: WebApp-Server-2
+        - Key: Application
+          Value: Customer Portal
+        - Key: Department
+          Value: Customer Relations
+        - Key: Environment
+          Value: Prod
+        - Key: Backup
+          Value: Portal-Prod
+  
+  ##Application Load Balancer##
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "0"
+      Name: ALBTargetGroup
+      Port: 80
+      Protocol: HTTP
+      Targets:
+      - Id: !Ref appServer1
+      - Id: !Ref appServer2
+      VpcId:
+        Ref: 'VPC'
+      Tags:
+      - Key: Name
+        Value: ALBTargetGroup
+      - Key: Port
+        Value: "80"
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: ALBTargetGroup
+      LoadBalancerArn:
+          Ref: appLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  appLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: [appServer1, appServer2]
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+      - Ref: PUBSUBNETb
+      - Ref: PUBSUBNETa
+      SecurityGroups:
+      - Ref: ALBSG
+
+  ##DynamoDB Table##
+  portalTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - 
+          AttributeName: imageKey
+          AttributeType: "S"
+      KeySchema:
+        - 
+          AttributeName: imageKey
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+        - Key: Application
+          Value: Customer Portal
+        - Key: Department
+          Value: Customer Relations
+        - Key: Environment
+          Value: Prod
+        - Key: Backup
+          Value: Portal-Prod
+  portalSessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - 
+          AttributeName: id
+          AttributeType: "S"
+      KeySchema:
+        - 
+          AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: expires
+        Enabled: True
+      Tags:
+        - Key: Application
+          Value: Customer Portal
+        - Key: Department
+          Value: Customer Relations
+        - Key: Environment
+          Value: Prod
+        - Key: Backup
+          Value: Portal-Prod
+
+Outputs:
+  URL:
+    Description: URL of the website
+    Value: !Join ['', ['http://', !GetAtt [appLoadBalancer, DNSName]]]
+  S3bucketname:
+    Description: Name of the Bucket you will use for Static Data
+    Value: !Ref generatedBucket
+  regionSpecificS3bucketlocation:
+    Description: S3 Bucket's region specific location used for CloudFront Origin
+    Value: !Join 
+      - ''
+      - - !Ref generatedBucket
+        - .s3-
+        - !Ref 'AWS::Region'
+        - .amazonaws.com
+  labRegion:
+    Description: The Region that your Lab is running in
+    Value: !Ref AWS::Region
+##END###

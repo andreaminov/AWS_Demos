@@ -1,0 +1,708 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Starting environment for lab 6 of CFM
+Parameters:
+  companyName:
+    Description: Name of your company
+    Type: String
+    Default: AnyCompany Services, LLC
+  companyAbbr:
+    Description: Abbreviaion of your company 
+    Type: String
+    Default: ACS
+  instanceType:
+    Description: Instance type for app server
+    Type: String
+    Default: m5.large
+    AllowedValues:
+      - t2.micro
+      - t3.medium
+      - c5.large
+      - c5.4xlarge
+      - m5.large
+  dbInstanceType:
+    Description: Instance type for db server
+    Type: String
+    Default: r5.large
+    AllowedValues:
+      - t2.micro
+      - t3.medium
+      - c5.large
+      - c5.4xlarge
+      - r5.large
+      - m5.large
+  PDBmemUsage:
+    Type: String
+    Default: "12"
+    Description: The amount of memory in gb that will be used on the Prod DB server
+  dbRootPassword:
+    Description: the database root password
+    Type: String
+    NoEcho: true
+    Default: lab-Password!
+  dbServicePassword:
+    Description: the database application service password
+    Type: String
+    NoEcho: true
+    Default: labPassword!
+  latestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+Resources:
+  ##Network Resources
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/21
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref companyAbbr
+              - VPC
+  PUBSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Pub-a
+  PUBSUBNETb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Pub-b
+  PRIVSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/23
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Priv-a
+  PRIVSUBNETb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/23
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - Priv-b
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - IGW
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+  NGWaEIP:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewaya:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NGWaEIP.AllocationId
+      SubnetId: !Ref PUBSUBNETa
+  NGWbEIP:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewayb:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NGWbEIP.AllocationId
+      SubnetId: !Ref PUBSUBNETb
+  PUBRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - public-RT
+  PUBRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETa
+      RouteTableId: !Ref PUBRT
+  PUBRTASSOCb:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETb
+      RouteTableId: !Ref PUBRT
+  IGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PUBRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  PRIVRTa:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - private-RTa
+  PRIVRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETa
+      RouteTableId: !Ref PRIVRTa
+  NGWRoutea:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PRIVRTa
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewaya
+  PRIVRTb:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  !Join
+            - '-'
+            - 
+              - !Ref companyAbbr
+              - private-RTb
+  PRIVRTASSOCb:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETb
+      RouteTableId: !Ref PRIVRTb
+  NGWRouteb:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PRIVRTb
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayb
+  ##IAM Resources
+    ###Policy for CFN
+  LabCFNLaunchPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: LabCFNLaunch
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            Effect: Allow
+            Action: 
+              - 'iam:*' 
+              - 'sns:*' 
+              - 'application-autoscaling:*' 
+              - 's3:*' 
+              - 'kms:*' 
+              - 'logs:*' 
+              - 'lambda:*' 
+              - 'dynamodb:*' 
+              - 'events:*' 
+            Resource: '*'
+      Roles:
+        - LabLaunchCFNRole
+    DependsOn: LabLaunchCFNRole
+  ###Role for CFN Stack Creation
+  LabLaunchCFNRole: 
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      RoleName: LabLaunchCFNRole
+      AssumeRolePolicyDocument: 
+        Version: 2012-10-17
+        Statement: 
+          - 
+            Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'cloudformation.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+
+  ###Roles for the instances to talk to SSM
+  APPSERVERROLE: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+  APPSERVERINSTANCEPROFILE: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "APPSERVERROLE"
+  SQLSERVERROLE: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Path: "/"
+  SQLSERVERINSTANCEPROFILE: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "SQLSERVERROLE"
+
+  ###########
+    # ReadOnly group for student
+  ###########
+  ReadOnlyGroup:
+      Type: "AWS::IAM::Group"
+      Properties:
+        GroupName: QLReadOnly
+        ManagedPolicyArns: [ "arn:aws:iam::aws:policy/ReadOnlyAccess" ]
+  GroupAssignment:
+      Type: "AWS::IAM::UserToGroupAddition"
+      DependsOn: ReadOnlyGroup
+      Properties:
+        GroupName: QLReadOnly
+        Users:
+          - awsstudent
+  ##EC2 Prod Resources
+  ###Security Group for app server allowing http from internet
+  APPSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP App Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SG
+  allowHTTP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt APPSG.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  ###App Server with httpd, php and light website
+  appServer:
+    Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+              php-xml: []
+          files:
+            /var/www/html/index.php:
+              content: 
+                Fn::Sub:
+                  - |
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <title>The Prod Imaging System</title>
+                    </head>
+                    <body>
+                      <?php
+                      require 'vendor/autoload.php';
+                      use Aws\DynamoDb\DynamoDbClient;
+
+                      $dynamoDb = new DynamoDbClient([
+                            'region' => '${AWS::Region}',
+                            'version' => 'latest'
+                      ]);
+                      try {
+                        
+                      } catch (Exception $e) {
+                            echo 'Caught exception: ', $e->getMessage(), \n;
+                      }
+                      ?>
+                      <h1>The Prod AP System</h1>
+                      <small>${companyName} 2020</small>
+                      ${var}
+                    </body>
+                    </html>
+                  - var: ""
+              mode: '000600'
+              owner: apache
+              group: apache
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub | 
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub | 
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.appServer.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource appServer --region ${AWS::Region}
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+          commands:
+            01_install_composer:
+              command:
+                export HOME=/root && export COMPOSER_HOME=/root && curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/bin/composer && chmod +x /usr/bin/composer && export COMPOSER_HOME=/root
+            02_install_aws-php-sdk:
+              command:
+                export COMPOSER_HOME=/home/user/app/cache/composer/ && cd /var/www/html && composer require ext-simplexml && composer require aws/aws-sdk-php
+            03_pvcreate:
+              command: pvcreate /dev/sdf
+            04_vgcreate:
+              command: vgcreate vg0 /dev/sdf
+            05_lvcreate:
+              command: lvcreate -l 100%FREE -n images vg0
+            06_mkfs:
+              command: mkfs.ext4 /dev/vg0/images
+            07_mkdir:
+              command: mkdir /var/images
+            08_fstab:
+              command: echo "/dev/mapper/vg0-images /var/images ext4 defaults 0 2" >> /etc/fstab
+            09_mount:
+              command: mount -a
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref APPSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PUBSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSG
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource appServer --region ${AWS::Region}
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource appServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: Imaging-App-Prod
+        - Key: Function
+          Value: SQL
+        - Key: Application
+          Value: Imaging Application
+        - Key: Department
+          Value: Information Governance
+        - Key: Environment
+          Value: Prod
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdf
+          Ebs:
+              VolumeSize: 5120
+  
+  ###Security Group for mariadb server allowing 3306 from appsg
+  DBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP SQL Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SQL-SG
+  allowMySQL:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt DBSG.GroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !GetAtt APPSG.GroupId
+  ###mariadb server with database and mock app data
+  SQLServer:
+    Type: AWS::EC2::Instance
+    DependsOn: NGWRoutea
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          InstallAndSecure:
+            - Install
+            - Secure
+            - Configure
+            - restart_amazon-cloudwatch-agent
+        restart_amazon-cloudwatch-agent:
+          commands:
+            01_stop_service:
+              command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a stop
+            02_start_service:
+              command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+        Install:
+          packages:
+            rpm:
+              epel: "https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm"
+            yum:
+              mariadb-server: []
+          files:
+            /tmp/secure.sql:
+              content: !Sub |
+                UPDATE mysql.user SET Password=PASSWORD('${dbRootPassword}') WHERE User='root';
+                DELETE FROM mysql.user WHERE User='';
+                DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+                DROP DATABASE IF EXISTS test;
+                DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+                FLUSH PRIVILEGES;
+            /tmp/ap_install.sql:
+              content: !Sub |
+                CREATE DATABASE APDB;
+                CREATE USER 'ap_service'@'%' IDENTIFIED BY '${dbServicePassword}';
+                GRANT ALL PRIVILEGES ON APDB.* TO 'ap_service'@'%';
+                CREATE TABLE APDB.customers 
+                (id INT NOT NULL AUTO_INCREMENT KEY, 
+                first VARCHAR(254),
+                last VARCHAR(254), 
+                addr VARCHAR(254), 
+                city VARCHAR(254), 
+                state VARCHAR(254), 
+                zip VARCHAR(254),
+                accountNumber INT(9) ZEROFILL NOT NULL 
+                );
+
+                CREATE TABLE APDB.transactions
+                (id INT NOT NULL AUTO_INCREMENT KEY,
+                accountNumber INT(8) ZEROFILL NOT NULL,
+                credit BOOLEAN,
+                amount DECIMAL,
+                trans_date DATE,
+                trans_time TIME
+                );
+              mode: '000400'
+              owner: root
+              group: root
+            /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json:
+              content: !Sub |
+                {
+                  "metrics": {
+                    "append_dimensions": {
+                      "AutoScalingGroupName": "${!aws:AutoScalingGroupName}",
+                      "ImageId": "${!aws:ImageId}",
+                      "InstanceId": "${!aws:InstanceId}",
+                      "InstanceType": "${!aws:InstanceType}"
+                    },
+                    "metrics_collected": {
+                      "mem": {
+                        "measurement": [
+                          "mem_used_percent"
+                        ]
+                      },
+                      "swap": {
+                        "measurement": [
+                          "swap_used_percent"
+                        ]
+                      }
+                    }
+                  }
+                }
+              mode: '000400'
+              owner: root
+              group: root
+            /stress/mem_stress.py:
+              content: |
+                import argparse
+                import time
+
+                GB = 1024 * 1024 * 1024
+
+                def parse_cmd_args():
+                    """
+                    Parses command line args
+                    """
+                    parser = argparse.ArgumentParser(description='Memory Eating utility for python')
+                    parser.add_argument('-m', '--memory', type=int, default=-1, help='The amount of memory in gigs to eat', required = True)
+                    args = parser.parse_args()
+                    return args
+
+                def eat_memory(mem_to_eat):
+                    """
+                    Eats memeory
+                    :param mem_to_eat: The amount of memory to eat in gigs
+                    """
+                    global GB
+                    eat = "a" * GB * mem_to_eat
+                    while True:
+                        time.sleep(1)
+
+                def main():
+                    """
+                    Main sentinel
+                    """
+                    mem_to_eat = parse_cmd_args().memory
+                    eat_memory(mem_to_eat)
+
+                if __name__ == "__main__":
+                    main()
+            /etc/systemd/system/mem_stress.service:
+              content: !Sub |
+                [Unit]
+                Description=Memory Stress Service
+                After=multi-user.target
+
+                [Service]
+                Type=simple
+                ExecStart=/usr/bin/python /stress/mem_stress.py -m ${PDBmemUsage}
+
+                [Install]
+                WantedBy=default.target
+              mode: '000664'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              mariadb:
+                enabled: 'true'
+                ensureRunning: 'true'
+          commands:
+            restart_sysdaemon:
+              command: |
+                systemctl daemon-reload
+        Secure:
+          commands:
+            01_set_mysql_root_password:
+              command: |
+                mysql --user=root < /tmp/secure.sql
+        Configure:
+          commands:
+            configure_AP_DB:
+                command: !Sub |
+                  mysql --user=root --password=${dbRootPassword} < /tmp/ap_install.sql
+          services:
+            sysvinit:
+              mem_stress:
+                enabled: 'true'
+                ensureRunning: 'true'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref SQLSERVERINSTANCEPROFILE
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref dbInstanceType
+      Monitoring: true
+      SubnetId: !Ref PRIVSUBNETa
+      SecurityGroupIds: 
+        - !Ref DBSG
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -ex
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource SQLServer --region ${AWS::Region} \
+            --configsets InstallAndSecure
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource SQLServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: Imaging-DB-Prod
+        - Key: Function
+          Value: SQL
+        - Key: Application
+          Value: Imaging Application
+        - Key: Department
+          Value: Information Governance
+        - Key: Environment
+          Value: Prod
+
+Outputs:
+  LabRegion:
+    Description: The Region that your Lab is running in
+    Value: !Ref AWS::Region
+
+##END###

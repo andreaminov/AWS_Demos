@@ -1,0 +1,733 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Lab 4 CF template
+Parameters:
+  companyName:
+    Description: Name of your company
+    Type: String
+    Default: ExampleCorp
+  instanceType:
+    Description: Instance type for app server
+    Type: String
+    Default: c5.large
+    AllowedValues:
+      - t2.micro
+      - t3.medium
+      - c5.large
+      - c5.4xlarge
+      - m5.large
+  latestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+Resources:
+  
+  ##Network Resources
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/21
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: Lab-VPC
+  PUBSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: Lab-Pub-a
+  PRIVSUBNETa:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/23
+      Tags:
+        - Key: Name
+          Value: Lab-Priv-a
+  PRIVSUBNETb:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/23
+      Tags:
+        - Key: Name
+          Value: Lab-Priv-b
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Lab-IGW
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+  PUBRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  Lab-public-RT
+  PUBRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PUBSUBNETa
+      RouteTableId: !Ref PUBRT
+  IGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PUBRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  PRIVRTa:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  Lab-private-RTa
+  PRIVRTASSOCa:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETa
+      RouteTableId: !Ref PRIVRTa
+  PRIVRTb:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value:  Lab-private-RTb
+  PRIVRTASSOCb:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PRIVSUBNETb
+      RouteTableId: !Ref PRIVRTb
+  
+  ##IAM Resources
+  ###Roles for the instances to talk to SSM
+  APPSERVERROLE: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+  AppServerInstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "APPSERVERROLE"
+  s3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: s3BucketAccess
+      Roles:
+        - !Ref APPSERVERROLE
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:PutObjectAcl
+            Resource: 
+              - !GetAtt imagesBucket.Arn
+              - Fn::Join:
+                - ""
+                - - !GetAtt imagesBucket.Arn
+                  - "/*"
+  getImagingDBSecretPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: getImagingDBSecret
+      Roles:
+        - !Ref APPSERVERROLE
+        - !Ref AWSLambdaRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            - Effect: Allow
+              Action: 
+                - secretsmanager:DescribeSecret
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Ref imagesDBSecret
+            - Effect: Allow
+              Action:
+                - secretsmanager:ListSecrets
+              Resource: "*"
+  AWSLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: LabLambdaRole
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                -
+                  Effect: "Allow"
+                  Action:
+                    - rds-data:ExecuteStatement
+                  Resource: "*"
+          PolicyName: "AccessRDSDataAPI"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+      Path: "/"
+
+  ###########
+    # ReadOnly group for student
+  ###########
+  ReadOnlyGroup:
+      Type: "AWS::IAM::Group"
+      Properties:
+        GroupName: QLReadOnly
+        ManagedPolicyArns: [ "arn:aws:iam::aws:policy/ReadOnlyAccess" ]
+  GroupAssignment:
+      Type: "AWS::IAM::UserToGroupAddition"
+      DependsOn: ReadOnlyGroup
+      Properties:
+        GroupName: QLReadOnly
+        Users:
+          - awsstudent
+  
+  ###S3 Resources###
+  imagesBucket:
+    Type: AWS::S3::Bucket
+  
+  ##EC2 Prod Resources
+  ###Security Group for app server allowing http from internet
+  APPSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Application Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Web-App-SG
+  allowHTTP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt APPSG.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  ###App Server with httpd, php and light website
+  appServer:
+    Type: AWS::EC2::Instance
+    DependsOn: imagesCluster
+    Metadata:
+      'AWS::CloudFormation::Init':
+        config:
+          packages:
+            yum:
+              tree: []
+              python3: []
+              jq: []
+              httpd: []
+              php: []
+              php-xml: []
+          files:
+            /var/www/html/index.php:
+              content: 
+                Fn::Sub:
+                  - |
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="utf-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+                        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+
+                        <title>The Production Imaging System</title>
+                    </head>
+                    <body>
+                      <?php
+                      $config = parse_ini_file("/lab/imagesDB.config");
+
+                      $servername = $config["dbhost"];
+                      $username = $config["username"];
+                      $password = $config["password"];
+                      try {
+                              $conn = new mysqli($servername, $username, $password);
+                              // Check connection
+                              if ($conn->connect_error) {
+                                die("Connection failed: " . $conn->connect_error);
+                            }
+                            //echo "Connected successfully";
+
+                              $sql = "SELECT IMG.imageID AS imageID, IMG.path AS path, IMG.entryDate AS entryDate, IMG.bin AS bin, bin.path AS binPath FROM imagesDB.imageIndex AS IMG INNER JOIN imagesDB.bin AS bin ON IMG.bin = bin.id  ORDER BY RAND() LIMIT 25";
+                              $result = $conn->query($sql);
+                              echo "<header style='background: #a13941;color: #e9ecef;'>";
+                              echo "<div class='container' style='padding: 20px;'><h1>The Production Imaging System</h1></div>";
+                              echo "</header>";
+                              if ($result->num_rows > 0) {                
+                                echo "<section style='background: #e9ecef;'><div class='container' style='background: #fff;'><table class='table table-striped table-sm' style='margin-bottom: 0px;'>";
+                                echo "<thead><tr><th>Document</th><th>Entry Date</th><th>bin</th></tr></thead><tbody>";                
+                                while($row = $result->fetch_assoc()) {                        
+                                  $date=date_create($row["entryDate"]);
+                                  echo "<tr>";                        
+                                  echo "<td>";
+                                  echo "<a style='color: #a13941;' href='" .$row[binPath]. $row["path"]. "'>";
+                                  echo $row["imageID"];
+                                  echo "</a>";
+                                  echo "</td>";
+                                  echo "<td>". date_format($date,"m/d/Y"). "</td>";
+                                  echo "<td>". $row["bin"]. "</td>";
+                                  echo "</tr>";
+                                }
+                                echo "</tbody></table></div></section>";
+                              } else {
+                                echo "0 results";
+                            }
+                            $conn->close();
+                      } catch (Exception $e) {
+                            echo 'Caught exception: ', $e->getMessage(), \n;
+                      }
+                      ?>
+                      <footer style="background: #a13941;color: #e9ecef;" >
+                      <div class="container"><small>${companyName} 2020</small></div>
+                      </footer>
+                    </body>
+                    </html>
+                  - var: ""
+              mode: '000600'
+              owner: apache
+              group: apache
+            /lab/update-secrets.sh:
+              content: !Sub |
+                #!/bin/bash
+
+                aws configure set default.region ${AWS::Region}
+
+                secretName=${imagesDBSecret}
+                secretString=$(aws secretsmanager get-secret-value --secret-id $secretName --query SecretString --output text)
+
+                echo [DB] > /lab/imagesDB.config
+                echo password="'$(echo $secretString | jq -r ."password")'" >> /lab/imagesDB.config
+                echo dbname=$(echo $secretString | jq -r ."dbname") >> /lab/imagesDB.config
+                echo dbport=$(echo $secretString | jq -r ."port") >> /lab/imagesDB.config
+                echo dbhost=$(echo $secretString | jq -r ."host") >> /lab/imagesDB.config
+                echo username=$(echo $secretString | jq -r ."username") >> /lab/imagesDB.config
+              mode: '000755'
+              owner: root
+              group: root
+            /lab/imagesDB.sql:
+              content: |
+                DROP TABLE IF EXISTS imagesDB.imageIndex;
+                CREATE TABLE IF NOT EXISTS imagesDB.imageIndex (
+                    imageID VARCHAR(254) UNIQUE NOT NULL,
+                    path VARCHAR(254),
+                    entryDate TIMESTAMP,
+                    bin int(4) NOT NULL
+                );
+                DROP TABLE IF EXISTS imagesDB.bin;
+                CREATE TABLE IF NOT EXISTS imagesDB.bin (
+                    id INT(4) UNIQUE NOT NULL,
+                    path VARCHAR(254)
+                );
+              mode: '000755'
+              owner: root
+              group: root
+            /lab/create_pdfs.py:
+              content: |
+                import sys
+                import random
+                import string
+                import os
+                import mysql.connector
+                import configparser
+                import lorem
+
+                from datetime import datetime, timedelta
+                from ec2_metadata import ec2_metadata
+                from fpdf import FPDF
+
+                config = configparser.RawConfigParser()
+                config.read('/lab/imagesDB.config')
+
+                dbhost = config['DB']['dbhost']
+                dbusername = config['DB']['username']
+                dbpassword = config['DB']['password'].replace("'", "")
+                dbname = config['DB']['dbname']
+
+                mydb = mysql.connector.connect(
+                    host=dbhost,
+                    user=dbusername,
+                    passwd=dbpassword,
+                    database=dbname
+                )
+
+                def randomString(stringLength=8):
+                    letters = string.ascii_uppercase
+                    return ''.join(random.choice(letters) for i in range(stringLength))
+
+                def last_day(argument):
+                    switcher = {
+                        2: 28,
+                        4: 30,
+                        6: 30,
+                        9: 30,
+                        11: 30
+                    }
+                    return switcher.get(argument, 31)
+
+                def randomDate():
+                    current_year = int(datetime.now().year)
+                    y = random.randrange(current_year-1, current_year+1)
+                    last_month = 12
+                    if current_year == y:
+                        last_month = int(datetime.now().month)
+                    m = last_month
+                    if last_month != 1:
+                      m = random.randrange(1, last_month)
+                    dy = random.randrange(1, last_day(m))
+                    dte = str(y) + "/" + str(m) + "/" + str(dy)
+                    return(dte)
+
+                mycursor = mydb.cursor()
+
+                public_hostname = ec2_metadata.public_hostname
+
+                sql = "INSERT IGNORE INTO bin (id, path) VALUES (%s, %s)"
+                val = [
+                    (1, "http://" + public_hostname + "/images"),
+                    (2, "http://" + public_hostname + "/images/archive")
+                ]
+                mycursor.executemany(sql, val)
+                mydb.commit()
+
+                mycursor = mydb.cursor()
+
+                sql = "INSERT INTO imageIndex (imageID, path, entryDate, bin) VALUES (%s, %s, %s, %s)"
+                val = []
+
+                for x in range(0, 250):
+                    dte = randomDate()
+                    try:
+                        name = randomString(12)
+                        title = lorem.get_sentence(count=1, word_range=(1, 8)).replace(".", "")
+                        head = lorem.get_sentence(count=1, word_range=(1, 8)).replace(".", "")
+                        body = lorem.get_paragraph(count=(1, 5), comma=(0, 2), word_range=(4, 8), sentence_range=(5, 10), sep=os.linesep)
+
+                        pdf = FPDF()
+                        pdf.add_page()
+                        pdf.set_font("Courier", size = 8)
+                        pdf.cell(0, 8, name, align = 'R')
+                        pdf.set_font("Arial", size = 24)
+                        pdf.set_margins(10, 2.54)
+                        pdf.set_title(title)
+                        pdf.set_y(10)
+                        pdf.multi_cell(0, 10, head, align = 'C')
+                        pdf.set_y(pdf.get_y()+20)
+                        pdf.set_font("Arial", size = 15)
+                        pdf.multi_cell(0, 10, body, border = 1, align = 'L')
+                        ibin = 1
+                        time_between_insertion = datetime.now() - datetime.strptime(dte, '%Y/%m/%d')
+                        if time_between_insertion.days>90:
+                            try:
+                                os.makedirs("/var/www/html/images/archive/" + dte)
+                            except:
+                                pass
+                            pdf.output("/var/www/html/images/archive/" + dte + "/" + name + ".pdf")
+                            ibin = 2
+                        else:
+                            try:
+                                os.makedirs("/var/www/html/images/" + dte)
+                            except:
+                                pass
+                            pdf.output("/var/www/html/images/" + dte + "/" + name + ".pdf")
+
+                        record = (
+                            str(name + ".pdf"),
+                            str("/" + dte + "/" + name + ".pdf"),
+                            str(dte),
+                            ibin
+                        )
+                        val.append(record)
+
+                    except:
+                        pass
+
+                mycursor.executemany(sql, val)
+
+                mydb.commit()
+
+                print(mycursor.rowcount, " was inserted.")
+              mode: '000755'
+              owner: root
+              group: root
+            /lab/migrate_pdfs.py:
+              content: !Sub |
+                import mysql.connector
+                import configparser
+                import boto3
+
+                #initialize s3 client
+                client = boto3.client('s3')
+
+                ##Read the configuration file that is created from SecretsManager Secret
+                config = configparser.RawConfigParser()
+                config.read('/lab/imagesDB.config')
+
+                #initialize database variables
+                dbhost = config['DB']['dbhost']
+                dbusername = config['DB']['username']
+                dbpassword = config['DB']['password'].replace("'", "")
+                dbname = config['DB']['dbname']
+
+                #connect to the database
+                mydb = mysql.connector.connect(
+                    host=dbhost,
+                    user=dbusername,
+                    passwd=dbpassword,
+                    database=dbname
+                )
+                #create a cursor to use for database operations
+                mycursor = mydb.cursor()
+
+                #query for the records not already in the S3 bin
+                mycursor.execute("SELECT path, bin FROM imageIndex WHERE bin <> 3 ORDER BY entryDate;")
+                myresult = mycursor.fetchall()
+
+                i = 0
+                #loop through the results
+                for x in myresult:
+                    #increment count variable for output
+                    i += 1
+                    #create a path variable
+                    path = str(x[0])
+                    
+                    #determine existing bin
+                    if x[1] == 2:
+                        #if currently in the archive bin, upload to s3
+                        #to the Standard Infrequently Accessed Storage
+                        #Tier
+                        response = client.upload_file(
+                        '/var/www/html/images/archive' + path,
+                        '${imagesBucket}',
+                        path.replace("/", "", 1),
+                        ExtraArgs={
+                            'ACL': 'public-read',
+                            'StorageClass': 'STANDARD_IA',
+                            'ContentType': 'application/pdf'
+                        }
+                    )
+                    elif x[1] == 1:
+                        #if not in archive bin,
+                        #upload to S3 Standard Storage tier
+                        response = client.upload_file(
+                        '/var/www/html/images' + path,
+                        '${imagesBucket}',
+                        path.replace("/", "", 1),
+                        ExtraArgs={
+                            'ACL': 'public-read',
+                            'ContentType': 'application/pdf'
+                        }
+                    )
+                    #print record info to console
+                    print(str(i) + ": path: " + path + ", bin: " + str(x[1]))
+              mode: '000755'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+          commands:
+            01_install_composer:
+              command:
+                export HOME=/root && export COMPOSER_HOME=/root && curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/bin/composer && chmod +x /usr/bin/composer && export COMPOSER_HOME=/root
+            02_install_aws-php-sdk:
+              command:
+                export COMPOSER_HOME=/home/user/app/cache/composer/ && cd /var/www/html && composer require ext-simplexml && composer require aws/aws-sdk-php
+            03_pvcreate:
+              command: pvcreate /dev/sdf
+            04_vgcreate:
+              command: vgcreate vg0 /dev/sdf
+            05_lvcreate:
+              command: lvcreate -l 100%FREE -n images vg0
+            06_mkfs:
+              command: mkfs.ext4 /dev/vg0/images
+            07_mkdir:
+              command: mkdir /var/www/html/images
+            08_fstab:
+              command: echo "/dev/mapper/vg0-images /var/www/html/images ext4 defaults 0 2" >> /etc/fstab
+            09_mount:
+              command: mount -a
+            10_load-initial-secrets:
+              command: /lab/update-secrets.sh
+            11_refresh-secrets:
+              command: (crontab -l 2>/dev/null; echo "*/5 * * * * /lab/update-secrets.sh") | crontab -
+            12_install-database:
+              command: . /lab/imagesDB.config; mysql -h $dbhost --user=$username --password=$password < /lab/imagesDB.sql
+            13_get-pip:
+              command: curl -O https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py --user
+            14_install_pip_packages:
+              command: pip3 install fpdf mysql-connector ec2-metadata python-lorem boto3
+            15_create_pdfs:
+              command: for i in {1..5}; do python3 /lab/create_pdfs.py; done
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Properties:
+      IamInstanceProfile: !Ref AppServerInstanceProfile
+      ImageId: !Ref latestAmiId
+      InstanceType: !Ref instanceType
+      Monitoring: true
+      SubnetId: !Ref PUBSUBNETa
+      SecurityGroupIds: 
+        - !Ref APPSG
+      UserData: 
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} \
+            --resource appServer --region ${AWS::Region}
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} \
+            --resource appServer --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: Img-App-Prod
+        - Key: Function
+          Value: App
+        - Key: Application
+          Value: Imaging Application
+        - Key: Department
+          Value: Information Governance
+        - Key: Environment
+          Value: Prod
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdf
+          Ebs:
+              VolumeSize: 5120
+  
+  ###Security Group for the aurora cluster allowing 3306 from appsg
+  DBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for AP SQL Server
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AP-SQL-SG
+  allowMySQL:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt DBSG.GroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !GetAtt APPSG.GroupId
+
+  ###This is a Secret resource with a randomly generated password in its SecretString JSON.
+  imagesDBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: 'This is my rds instance secret'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "imaging_service"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludePunctuation: true
+      Tags:
+        -
+          Key: AppName
+          Value: ImagingApplication
+  imagesDBSecretAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref imagesDBSecret
+      TargetId: !Ref imagesCluster
+      TargetType: AWS::RDS::DBCluster
+  
+  ###RDS cluster
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet Group for Lab-VPC
+      SubnetIds:
+        - !Ref PRIVSUBNETa
+        - !Ref PRIVSUBNETb
+  imagesCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Delete
+    Properties:
+      Engine: aurora
+      DatabaseName: imagesDB
+      MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref imagesDBSecret, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref imagesDBSecret, ':SecretString:password}}' ]]
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DBSG
+      EngineMode: serverless
+      ScalingConfiguration:
+        AutoPause: false
+        MinCapacity: 1
+        MaxCapacity: 4
+      Tags:
+        - Key: Name
+          Value: Imaging-Database
+        - Key: Function
+          Value: SQL
+        - Key: Application
+          Value: Imaging Application
+        - Key: Department
+          Value: Information Governance
+        - Key: Environment
+          Value: Production
+
+Outputs:
+  region:
+    Value: !Ref AWS::Region
+  bucketName:
+    Value: !Ref imagesBucket
+  secretsManagerArn:
+    Value: !Ref imagesDBSecret
+  clusterArn:
+    Value: !Sub 'arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:${imagesCluster}'
+##END###
