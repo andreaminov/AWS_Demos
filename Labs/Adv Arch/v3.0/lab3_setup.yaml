@@ -1,0 +1,599 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  This lab demonstrates the process to build a eks cluster,nodes and deploy the game 2048 game on EKS Fargate.
+
+Parameters:
+  UserId:
+    Description: lab username
+    Type: String
+    Default: awsstudent
+
+Mappings:
+  SubnetConfig:
+    VPC:
+      CIDR: '10.0.0.0/16'
+    PublicOne:
+      CIDR: '10.0.1.0/24'
+    PublicTwo:
+      CIDR: '10.0.2.0/24'
+    PrivateOne:
+      CIDR: '10.0.3.0/24'
+    PrivateTwo:
+      CIDR: '10.0.4.0/24'
+
+Resources:
+  # VPC in which containers will be networked.
+  # It has two public subnets
+  # We distribute the subnets across the first two available subnets
+  # for the region, for high availability.
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: !FindInMap ['SubnetConfig', 'VPC', 'CIDR']
+      Tags:
+        - Key: Name
+          Value: Lab-3 EKS Fargate
+
+  # Two public subnets, where containers can have public IP addresses
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: { Ref: 'AWS::Region' }
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PublicOne', 'CIDR']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Lab-3 Public Subnet 1
+        - Key: kubernetes.io/role/elb
+          Value: 1
+        - Key: kubernetes.io/cluster/ekscluster
+          Value: shared
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: { Ref: 'AWS::Region' }
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PublicTwo', 'CIDR']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Lab-3 Public Subnet 2
+        - Key: kubernetes.io/role/elb
+          Value: 1
+        - Key: kubernetes.io/cluster/ekscluster
+          Value: shared
+
+# Two Private subnet for fargate 
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: { Ref: 'AWS::Region' }
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PrivateOne', 'CIDR']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Lab-3 Private Subnet 1
+        - Key: kubernetes.io/role/elb
+          Value: 1
+        - Key: kubernetes.io/cluster/ekscluster
+          Value: shared
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: { Ref: 'AWS::Region' }
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PrivateTwo', 'CIDR']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Lab-3 Private Subnet 2
+        - Key: kubernetes.io/role/elb
+          Value: 1
+        - Key: kubernetes.io/cluster/ekscluster
+          Value: shared
+
+  # Setup networking resources for the public subnets. Containers
+  # in the public subnets have public IP addresses and the routing table
+  # sends network traffic via the internet gateway.
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Lab-3 IGW
+
+  GatewayAttachement:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'VPC'
+      InternetGatewayId: !Ref 'InternetGateway'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+
+  PubSubnet1RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PubSubnet2RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachement
+    Properties:
+      RouteTableId: !Ref 'PublicRouteTable'
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref 'InternetGateway'
+
+# Nat Gateway for private subnet
+  NatGWAttachment:
+      Type: 'AWS::EC2::EIP'
+      Properties:
+        Domain: vpc
+
+  NatGW:
+      Type: 'AWS::EC2::NatGateway'
+      Properties:
+        AllocationId: !GetAtt 
+          - NatGWAttachment
+          - AllocationId
+        SubnetId: !Ref PublicSubnet1
+
+# Setup networking resources for the private subnets. 
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+          - Key: Name
+            Value: 'Private Route Table'
+
+  PrivateSubnet1RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+  
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref 'PrivateRouteTable'
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGW
+
+
+  FargatePolicyManaged:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: Policy for FARGATE
+      Path: /
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - acm:DescribeCertificate
+              - acm:ListCertificates
+              - acm:GetCertificate
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:CreateSecurityGroup
+              - ec2:CreateTags
+              - ec2:DeleteTags
+              - ec2:DeleteSecurityGroup
+              - ec2:DescribeAccountAttributes
+              - ec2:DescribeAddresses
+              - ec2:DescribeInstances
+              - ec2:DescribeInstanceStatus
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeTags
+              - ec2:DescribeVpcs
+              - ec2:ModifyInstanceAttribute
+              - ec2:ModifyNetworkInterfaceAttribute
+              - ec2:RevokeSecurityGroupIngress
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:AddListenerCertificates
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:CreateListener
+              - elasticloadbalancing:CreateLoadBalancer
+              - elasticloadbalancing:CreateRule
+              - elasticloadbalancing:CreateTargetGroup
+              - elasticloadbalancing:DeleteListener
+              - elasticloadbalancing:DeleteLoadBalancer
+              - elasticloadbalancing:DeleteRule
+              - elasticloadbalancing:DeleteTargetGroup
+              - elasticloadbalancing:DeregisterTargets
+              - elasticloadbalancing:DescribeListenerCertificates
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:DescribeRules
+              - elasticloadbalancing:DescribeSSLPolicies
+              - elasticloadbalancing:DescribeTags
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:ModifyListener
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+              - elasticloadbalancing:ModifyRule
+              - elasticloadbalancing:ModifyTargetGroup
+              - elasticloadbalancing:ModifyTargetGroupAttributes
+              - elasticloadbalancing:RegisterTargets
+              - elasticloadbalancing:RemoveListenerCertificates
+              - elasticloadbalancing:RemoveTags
+              - elasticloadbalancing:SetIpAddressType
+              - elasticloadbalancing:SetSecurityGroups
+              - elasticloadbalancing:SetSubnets
+              - elasticloadbalancing:SetWebACL
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - iam:GetServerCertificate
+              - iam:ListServerCertificates
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+            Resource: "*"
+            Condition:
+              StringEquals:
+                iam:AWSServiceName:
+                  - eks.amazonaws.com
+                  - eks-nodegroup.amazonaws.com
+                  - eks-fargate.amazonaws.com
+          - Effect: Allow
+            Action:
+              - cognito-idp:DescribeUserPoolClient
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - waf-regional:GetWebACLForResource
+              - waf-regional:GetWebACL
+              - waf-regional:AssociateWebACL
+              - waf-regional:DisassociateWebACL
+              - waf:GetWebACL
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - tag:GetResources
+              - tag:TagResources
+            Resource: '*'
+          - Effect: Deny
+            Action: ec2:*Spot*
+            Resource: '*'
+          - Effect: Deny
+            Action:
+              - ec2:StartInstances
+              - ec2:RunInstances
+            Resource: 'arn:aws:ec2:*:*:instance/*'
+            Condition:
+              StringNotEquals:
+                'ec2:InstanceType':
+                  - t2.micro
+                  - t2.small
+          - Effect: Deny
+            Action: 'ec2:RunInstances'
+            Resource: 'arn:aws:ec2:*:*:image/*'
+            Condition:
+              StringNotEqualsIgnoreCase:
+                'ec2:Owner': amazon
+
+  # This is a role which is used by the EKS tasks themselves.
+  EKSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonEKSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Allow the ECS Tasks to download images from ECR
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+
+                  # Allow the ECS tasks to upload logs to CloudWatch
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+  lab2FargateRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com, ecs-tasks.amazonaws.com,eks.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: lab2Fargate
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - acm:DescribeCertificate
+                  - acm:ListCertificates
+                  - acm:GetCertificate
+                  - cloudformation:*
+                  - cloudwatch:*
+                  - kms:*
+                  - logs:*
+                  - ssm:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - eks:DeleteFargateProfile
+                  - eks:UpdateClusterVersion
+                  - eks:UntagResource
+                  - eks:UpdateClusterConfig
+                  - eks:CreateNodegroup
+                  - eks:DeleteCluster
+                  - eks:CreateFargateProfile
+                  - eks:UpdateNodegroupVersion
+                  - eks:DeleteNodegroup
+                  - eks:TagResource
+                  - eks:UpdateNodegroupConfig
+                  - eks:Describe*
+                  - eks:List*
+                  - eks:CreateCluster
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:Complete*
+                  - ecr:Create*
+                  - ecr:Delete*
+                  - ecr:Put*
+                  - ecr:StartImageScan
+                  - ecr:InitiateLayerUpload
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:Describe*
+                  - ecr:List*
+                  - ecr:Batch*
+                  - ecr:Get*
+                  - ecr:Tag*
+                  - ecr:Untag*
+                  - ecr:Upload*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ec2:*
+                  - ec2:Describe*
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:CreateSecurityGroup
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                  - ec2:DeleteSecurityGroup
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeAddresses
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeInternetGateways
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeTags
+                  - ec2:DescribeVpcs
+                  - ec2:ModifyInstanceAttribute
+                  - ec2:ModifyNetworkInterfaceAttribute
+                  - ec2:RevokeSecurityGroupIngress
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - elasticloadbalancing:AddListenerCertificates
+                  - elasticloadbalancing:AddTags
+                  - elasticloadbalancing:CreateListener
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:CreateRule
+                  - elasticloadbalancing:CreateTargetGroup
+                  - elasticloadbalancing:DeleteListener
+                  - elasticloadbalancing:DeleteLoadBalancer
+                  - elasticloadbalancing:DeleteRule
+                  - elasticloadbalancing:DeleteTargetGroup
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:DescribeListenerCertificates
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeLoadBalancerAttributes
+                  - elasticloadbalancing:DescribeRules
+                  - elasticloadbalancing:DescribeSSLPolicies
+                  - elasticloadbalancing:DescribeTags
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:DescribeTargetGroupAttributes
+                  - elasticloadbalancing:DescribeTargetHealth
+                  - elasticloadbalancing:ModifyListener
+                  - elasticloadbalancing:ModifyLoadBalancerAttributes
+                  - elasticloadbalancing:ModifyRule
+                  - elasticloadbalancing:ModifyTargetGroup
+                  - elasticloadbalancing:ModifyTargetGroupAttributes
+                  - elasticloadbalancing:RegisterTargets
+                  - elasticloadbalancing:RemoveListenerCertificates
+                  - elasticloadbalancing:RemoveTags
+                  - elasticloadbalancing:SetIpAddressType
+                  - elasticloadbalancing:SetSecurityGroups
+                  - elasticloadbalancing:SetSubnets
+                  - elasticloadbalancing:SetWebACL
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:GetRole
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:AttachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:ListInstanceProfiles
+                  - iam:AddRoleToInstanceProfile
+                  - iam:ListInstanceProfilesForRole
+                  - iam:PassRole
+                  - iam:DetachRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:GetOpenIDConnectProvider
+                  - iam:CreateOpenIDConnectProvider
+                  - iam:DeleteOpenIDConnectProvider
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                Resource: 
+                  - !Sub arn:aws:iam::${AWS::AccountId}:instance-profile/eksctl-*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/eksctl-*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/eksctl-managed-*
+              - Effect: Allow
+                Action:
+                  - iam:CreateServiceLinkedRole
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    iam:AWSServiceName:
+                      - eks.amazonaws.com
+                      - eks-nodegroup.amazonaws.com
+                      - eks-fargate.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - iam:GetRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/*
+              - Effect: Allow
+                Action:
+                  - 'cognito-idp:DescribeUserPoolClient'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - waf-regional:GetWebACLForResource
+                  - waf-regional:GetWebACL
+                  - waf-regional:AssociateWebACL
+                  - waf-regional:DisassociateWebACL
+                  - waf:GetWebACL
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - tag:GetResources
+                  - tag:TagResources
+                Resource: '*'
+              - Effect: Deny
+                Action: 'ec2:*Spot*'
+                Resource: '*'
+              - Effect: Deny
+                Action:
+                  - ec2:StartInstances
+                  - ec2:RunInstances
+                Resource: 'arn:aws:ec2:*:*:instance/*'
+                Condition:
+                  StringNotEquals:
+                    'ec2:InstanceType':
+                      - t2.micro
+                      - t2.small
+              - Effect: Deny
+                Action: ec2:RunInstances
+                Resource: 'arn:aws:ec2:*:*:image/*'
+                Condition:
+                  StringNotEqualsIgnoreCase:
+                    'ec2:Owner': amazon
+
+# cloud9 Instance profile                     
+  Cloud9InstProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'lab2FargateRole']
+
+  #Students will use this cloud9 IDE to perfrom EKS and Fargate setup.
+
+  Cloud9Instance:
+    Type: AWS::Cloud9::EnvironmentEC2
+    Properties:
+      InstanceType: 't2.micro'
+      OwnerArn: !Sub 'arn:aws:iam::${AWS::AccountId}:user/${UserId}'
+      Description: IDE to handle all the lab activites
+      AutomaticStopTimeMinutes: 90
+      SubnetId: !Ref PublicSubnet1
+      Name: !Sub Cloud9Instance-${AWS::StackName}
+
+  ReadOnlyGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+  
+  GroupAssignment:
+    Type: AWS::IAM::UserToGroupAddition
+    DependsOn: ReadOnlyGroup
+    Properties:
+      GroupName: !Ref ReadOnlyGroup
+      Users: 
+        - !Ref UserId
+
+# These are the values output by the CloudFormation template. Be careful
+# about changing any of them, because of them are exported with specific
+# names so that the other task related CF templates can use them.
+Outputs:
+  Region:
+    Value: !Ref 'AWS::Region'
+    Description: Region used for the lab
+  FARGATEPOLICYARN:
+    Description: The ARN of the FARGATE_POLICY
+    Value: !Ref 'FargatePolicyManaged'
+  InstanceRoleARN:
+    Description: Instance Role ARN
+    Value: !GetAtt 'lab2FargateRole.Arn'

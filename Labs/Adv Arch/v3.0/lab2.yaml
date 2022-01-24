@@ -1,0 +1,774 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This lab is to configure AWS Transit Gateways. This lab also gives students the opportunity to build and configure routing via Transit Gateways with multiple levels of complexity.
+
+Mappings:
+  # This needs to be updated as Regions and AZ's are added.
+  RegionMap:
+    eu-north-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    ap-south-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    eu-west-3:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    eu-west-2:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    eu-west-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    ap-northeast-3:
+      SubnetA: True
+      SubnetB: False
+      SubnetC: False
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    ap-northeast-2:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    ap-northeast-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    sa-east-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: False
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    ca-central-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: False
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    ap-southeast-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    ap-southeast-2:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    eu-central-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    us-east-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: True
+      SubnetE: True
+      SubnetF: True
+    us-east-2:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    us-west-1:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: False
+      SubnetD: False
+      SubnetE: False
+      SubnetF: False
+    us-west-2:
+      SubnetA: True
+      SubnetB: True
+      SubnetC: True
+      SubnetD: True
+      SubnetE: False
+      SubnetF: False
+
+# Parameters used in these asset creation
+Parameters:
+  KeyName:
+    Description: EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: default-lab-key
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  S3ResourceBucket:
+    Type: String
+    Description: 'S3 Bucket of where to pull lab resources from'
+    Default: '-tcprod'
+  S3PathPrefix:
+    Type: String
+    Description: "The path prefix where lab resources are stored (Leading and trailing slash required!)"
+    Default: "courses/ILT-TF-300-ADVARC/v3.0.0/lab-2"
+    # Default: courses/ILT-TF-300-ADVARC/v3.0.1/lab-2
+  InstanceType:
+    Description: Amazon EC2 instance type
+    Type: String
+    Default: t2.small
+    AllowedValues:
+     - t2.small
+     - t2.micro
+    ConstraintDescription: must be a valid EC2 instance type.
+  VPCCIDRA:
+    Description: 'CIDR Block for VPC (Do Not Edit)'
+    Type: String
+    Default: 10.1.0.0/16
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  VPCCIDRB:
+    Description: 'CIDR Block for VPC (Do Not Edit)'
+    Type: String
+    Default: 10.2.0.0/16
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  VPCCIDRC:
+    Description: 'CIDR Block for VPC (Do Not Edit)'
+    Type: String
+    Default: 10.3.0.0/16
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  VPCCIDRD:
+    Description: 'CIDR Block for VPC (Do Not Edit)'
+    Type: String
+    Default: 10.4.0.0/16
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  VPCCIDRE:
+    Description: 'CIDR Block for VPC (Do Not Edit)'
+    Type: String
+    Default: 10.5.0.0/16
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+
+  VPCSubA:
+    Description: 'Public Subnet A (Do Not Edit)'
+    Type: String
+    Default: 10.1.1.0/24
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  VPCSubB:
+    Description: 'Private subnet B (Do Not Edit)'
+    Type: String
+    Default: 10.2.2.0/24
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  VPCSubC:
+    Description: 'Private subnet C (Do Not Edit)'
+    Type: String
+    Default: 10.3.3.0/24
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  VPCSubD:
+    Description: 'Private Subnet D(Do Not Edit)'
+    Type: String
+    Default: 10.4.4.0/24
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  VPCSubE:
+    Description: 'Private Subnet E(Do Not Edit)'
+    Type: String
+    Default: 10.5.5.0/24
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$'
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  UserId:
+    Default: awsstudent
+    Type: String
+
+Conditions:
+  createSubnetB: !Equals [ !FindInMap [RegionMap, !Ref "AWS::Region", SubnetB], True ]
+  createSubnetC: !Equals [ !FindInMap [RegionMap, !Ref "AWS::Region", SubnetC], True ]
+  createSubnetD: !Equals [ !FindInMap [RegionMap, !Ref "AWS::Region", SubnetD], True ]
+  createSubnetE: !Equals [ !FindInMap [RegionMap, !Ref "AWS::Region", SubnetE], True ]
+  isUswest2: !Equals [!Ref "AWS::Region", "us-west-2"]
+
+
+Resources:
+  ### Networking Section ###
+  # Defining the VPC Used for this lab, it contains two public subnet and a private subnet
+  VPCA:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VPCCIDRA
+      EnableDnsSupport: True
+      EnableDnsHostnames: True
+      Tags:
+        - Key: Name
+          Value: vpc-a
+
+  VPCB:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VPCCIDRB
+      EnableDnsSupport: True
+      EnableDnsHostnames: True
+      Tags:
+        - Key: Name
+          Value: vpc-b
+  VPCC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VPCCIDRC
+      EnableDnsSupport: True
+      EnableDnsHostnames: True
+      Tags:
+        - Key: Name
+          Value: vpc-c
+  VPCD:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VPCCIDRD
+      EnableDnsSupport: True
+      EnableDnsHostnames: True
+      Tags:
+        - Key: Name
+          Value: vpc-d
+
+  # Users will hit EC2 instances which are running in the public subnets.
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    DependsOn: VPCA
+
+  # Attached this IGW to the VPC
+  AttachGateway:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPCA
+      InternetGatewayId: !Ref InternetGateway
+
+  # First public subnet, this will host a sample web app running in Linux based EC2.
+  VPCSubnetA:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPCA
+      CidrBlock: !Ref VPCSubA
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: 'vpc-a_public'
+      - Key: VPC
+        Value: 'A'
+  VPCSubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPCB
+      CidrBlock: !Ref VPCSubB
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: 'vpc-b_private'
+      - Key: VPC
+        Value: 'B'
+  VPCSubnetC:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPCC
+      CidrBlock: !Ref VPCSubC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: 'vpc-c_private'
+      - Key: VPC
+        Value: 'C'
+  VPCSubnetD:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPCD
+      CidrBlock: !Ref VPCSubD
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+      - Key: Name
+        Value: 'vpc-d_private'
+      - Key: VPC
+        Value: 'D'
+
+
+  # Define the Public Routing Table
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    DependsOn:
+      - AttachGateway
+    Properties:
+      VpcId: !Ref VPCA
+      Tags:
+      - Key: Name
+        Value: 'vpc_a-public'
+
+  PrivateRouteTableB:
+    Type: 'AWS::EC2::RouteTable'
+    Condition: createSubnetB
+    Properties:
+      VpcId: !Ref VPCB
+      Tags:
+      - Key: Name
+        Value: 'vpc_b-private'
+
+  PrivateRouteTableC:
+    Type: 'AWS::EC2::RouteTable'
+    Condition: createSubnetC
+    Properties:
+      VpcId: !Ref VPCC
+      Tags:
+      - Key: Name
+        Value: 'vpc_c-private'
+
+  PrivateRouteTableD:
+    Type: 'AWS::EC2::RouteTable'
+    Condition: createSubnetD
+    Properties:
+      VpcId: !Ref VPCD
+      Tags:
+      - Key: Name
+        Value: 'vpc_d-private'
+
+  # And add in the default route to 0.0.0.0/0
+  PublicRouteIGW:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Attach the routing table to each of the subnets
+  PublicRouteTableAssociationA:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref VPCSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: createSubnetB
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      SubnetId: !Ref VPCSubnetB
+
+  PrivateRouteTableAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: createSubnetC
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableC
+      SubnetId: !Ref VPCSubnetC
+
+  PrivateRouteTableAssociationD:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: createSubnetD
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableD
+      SubnetId: !Ref VPCSubnetD
+
+  SSHSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80 and SSH access via port 22
+      VpcId:
+        !Ref 'VPCA'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+      Tags:
+        - Key: Name
+          Value: SSH-SG
+  SSHSecurityGroupB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80 and SSH access via port 22
+      VpcId:
+        !Ref 'VPCB'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+      Tags:
+        - Key: Name
+          Value: SSH-SG
+  SSHSecurityGroupC:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80 and SSH access via port 22
+      VpcId:
+        !Ref 'VPCC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+      Tags:
+        - Key: Name
+          Value: SSH-SG
+  SSHSecurityGroupD:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80 and SSH access via port 22
+      VpcId:
+        !Ref 'VPCD'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+      Tags:
+        - Key: Name
+          Value: SSH-SG
+    
+### Create EC2 Instances with simple web app ###
+  CommandHostInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref CommandHostRole
+      InstanceProfileName: !Sub 'CommandHostRole-${AWS::StackName}'
+
+  CommandHostRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: 'Allow'
+          Principal:
+            Service: ['ec2.amazonaws.com']
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: SSMAccess
+        PolicyDocument:
+          Statement:
+          - Effect:  'Allow'
+            Action: [
+              'cloudwatch:PutMetricData',
+              'ec2:DescribeInstanceStatus',
+              'ec2messages:AcknowledgeMessage',
+              'ec2messages:DeleteMessage',
+              'ec2messages:FailMessage',
+              'ec2messages:GetEndpoint',
+              'ec2messages:GetMessages',
+              'ec2messages:SendReply',
+              'logs:CreateLogGroup',
+              'logs:CreateLogStream',
+              'logs:DescribeLogGroups',
+              'logs:DescribeLogStreams',
+              'logs:PutLogEvents',
+              'ssm:Desc*',
+              'ssm:ExecuteAutomation',
+              'ssm:Get*',
+              'ssm:List*',
+              'ssm:PutComplianceItems',
+              'ssm:PutConfigurePackageResult',
+              'ssm:PutInventory',
+              'ssm:RunCommand',
+              'ssm:SendCommand',
+              'ssm:StartAutomationExecution',
+              'ssm:UpdateAssociationStatus',
+              'ssm:UpdateInstanceAssociationStatus',
+              'ssm:UpdateInstanceInformation'
+            ]
+            Resource: "*"
+
+  #Linux EC2 instance
+  CommandHost:
+    Type: AWS::EC2::Instance
+    Properties:
+      IamInstanceProfile: !Ref CommandHostInstanceProfile
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      NetworkInterfaces:
+      - DeviceIndex: "0"
+        AssociatePublicIpAddress: true
+        SubnetId: !Ref VPCSubnetA
+        GroupSet:
+          - !Ref SSHSecurityGroup
+      Tags:
+       - Key: 'Name'
+         Value: !Sub 'CommandHost-${AWS::StackName}'
+      UserData:
+        'Fn::Base64':
+          !Sub |
+            #!/bin/bash -ex
+
+            # Update os
+            yum update -y
+
+  HostB:
+    Type: AWS::EC2::Instance
+    Properties:
+      IamInstanceProfile: !Ref CommandHostInstanceProfile
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      NetworkInterfaces:
+      - DeviceIndex: "0"
+        AssociatePublicIpAddress: true
+        SubnetId: !Ref VPCSubnetB
+        GroupSet:
+          - !Ref SSHSecurityGroupB
+      Tags:
+       - Key: 'Name'
+         Value: !Sub 'HostB-${AWS::StackName}'
+      UserData:
+        'Fn::Base64':
+          !Sub |
+            #!/bin/bash -ex
+
+            # Update os
+            yum update -y
+
+  HostC:
+    Type: AWS::EC2::Instance
+    Properties:
+      IamInstanceProfile: !Ref CommandHostInstanceProfile
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      NetworkInterfaces:
+      - DeviceIndex: "0"
+        AssociatePublicIpAddress: true
+        SubnetId: !Ref VPCSubnetC
+        GroupSet:
+          - !Ref SSHSecurityGroupC
+      Tags:
+       - Key: 'Name'
+         Value: !Sub 'HostC-${AWS::StackName}'
+      UserData:
+        'Fn::Base64':
+          !Sub |
+            #!/bin/bash -ex
+
+            # Update os
+            yum update -y
+
+  HostD:
+    Type: AWS::EC2::Instance
+    Properties:
+      IamInstanceProfile: !Ref CommandHostInstanceProfile
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      NetworkInterfaces:
+      - DeviceIndex: "0"
+        AssociatePublicIpAddress: true
+        SubnetId: !Ref VPCSubnetD
+        GroupSet:
+          - !Ref SSHSecurityGroupD
+      Tags:
+       - Key: 'Name'
+         Value: !Sub 'HostD-${AWS::StackName}'
+      UserData:
+        'Fn::Base64':
+          !Sub |
+            #!/bin/bash -ex
+
+            # Update os
+            yum update -y
+
+  secondaryLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: This Lambda function triggers Cloudformation to remote region.
+      Code:
+        ZipFile: !Sub |
+          import boto3, os, time, random
+          def lambda_handler(event, context):
+
+            #Get the region
+            if '${AWS::Region}' == 'us-east-1':
+              region='us-west-2'
+            else:
+              region='us-east-1'
+
+            # Invoke cloudformation to the remote region
+            cf_client = boto3.client('cloudformation', region_name=region)
+
+            # Should add a create/delete if in here so that it cleans itself up? not sure with random stack name how easy that would be.
+            cf_client.create_stack(
+              StackName='${AWS::StackName}sec',
+              TemplateURL='https://${AWS::Region}-tcprod.s3.amazonaws.com/${S3PathPrefix}/scripts/transit-remote.template',
+              Capabilities=['CAPABILITY_NAMED_IAM']
+              #,
+              # Parameters=[
+              #   {
+              #     'ParameterKey': 'KeyName',
+              #     'ParameterValue': '${KeyName}'
+              #   },
+              # ]
+            )
+
+            curlCMD = "curl -X PUT -H 'Content-Type:' --data-binary '{\"Status\" : \"SUCCESS\",\"Reason\" : \"Configuration Complete\",\"PhysicalResourceId\" : \"secondaryLambda\",\"StackId\" : \"" + event["StackId"] + "\",\"RequestId\" : \"" + event["RequestId"] + "\",\"LogicalResourceId\" : \"" + event["LogicalResourceId"] + "\",\"UniqueId\" : \"secondaryLambda1\"}' \"" + event["ResponseURL"] + "\""
+            print(curlCMD)
+            try:
+              os.system(curlCMD)
+            except Exception as e:
+              print('Error: ' + str(e))
+
+      Handler: index.lambda_handler
+      Role: !GetAtt 'LambdaExecutionRole.Arn'
+      Runtime: python3.7
+      Timeout: 300
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: customLambdaPol
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - ec2:*
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - s3:*
+                  - ssm:GetParameters
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - iam:CreateServiceLinkedRole
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/transitgateway.amazonaws.com/AWSServiceRoleForVPCTransitGateway*
+                Condition:
+                  StringLike:
+                    'iam:AWSServiceName': transitgateway.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - 'iam:AttachRolePolicy'
+                  - 'iam:PutRolePolicy'
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/transitgateway.amazonaws.com/AWSServiceRoleForVPCTransitGateway*
+              - Effect: Deny
+                Action: 'ec2:*Spot*'
+                Resource: '*'
+              - Effect: Deny
+                Action:
+                  - 'ec2:StartInstances'
+                  - 'ec2:RunInstances'
+                Resource: 'arn:aws:ec2:*:*:instance/*'
+                Condition:
+                  StringNotEquals:
+                    'ec2:InstanceType':
+                      - t2.micro
+                      - t2.small
+              - Effect: Deny
+                Action: 'ec2:RunInstances'
+                Resource: 'arn:aws:ec2:*:*:image/*'
+                Condition:
+                  StringNotEqualsIgnoreCase:
+                    'ec2:Owner': amazon
+              
+#Custom Resource to trigger lambda function.
+  invokeLambda:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: secondaryLambda
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt secondaryLambda.Arn
+
+# Adding readOnly access to user
+  ReadOnlyGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+  
+  GroupAssignment:
+    Type: AWS::IAM::UserToGroupAddition
+    DependsOn: ReadOnlyGroup
+    Properties:
+      GroupName: !Ref ReadOnlyGroup
+      Users: 
+        - !Ref UserId
+  
+ 
+Outputs:
+  CommandHostSessionManagementUrl:
+    Description: The URL to the Session Management Console for CommandHost
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/systems-manager/session-manager/${CommandHost}?region=${AWS::Region}
+  CommandHostPublicIP:
+    Description: IP address of the command Host.
+    Value: !GetAtt  CommandHost.PublicIp 
+  CommandHostPrivateIP:
+    Description: Private IP address of the Command Host.
+    Value: !GetAtt  CommandHost.PrivateIp 
+  HostB:
+    Description: IP address of the HostB.
+    Value: !GetAtt  HostB.PrivateIp
+  HostC:
+    Description: IP address of the HostC.
+    Value: !GetAtt  HostC.PrivateIp
+  HostD:
+    Description: IP address of the HostD.
+    Value: !GetAtt  HostD.PrivateIp
+  HostE:
+    Description: IP address of the HostE.
+    Value: '10.0.8.13'
+  PrimaryRegion:
+    Description: Primary Region used in the lab
+    Value: !Ref AWS::Region
+  RemoteRegion:
+    Description: Secondary region used in the lab
+    Value: !If [isUswest2, us-east-1, us-east-1]
