@@ -1,0 +1,2 @@
+$AMI = (aws ssm get-parameters --names /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base --query 'Parameters[0].[Value]' --output text)
+echo $AMI

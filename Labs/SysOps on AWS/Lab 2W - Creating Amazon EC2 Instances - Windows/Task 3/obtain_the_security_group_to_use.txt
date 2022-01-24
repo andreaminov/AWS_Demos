@@ -1,0 +1,2 @@
+$SG = (aws ec2 describe-security-groups --filters Name=group-name,Values=WebSecurityGroup --query SecurityGroups[].GroupId --output text)
+echo $SG

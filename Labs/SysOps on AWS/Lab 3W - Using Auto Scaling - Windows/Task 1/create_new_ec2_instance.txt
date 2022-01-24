@@ -1,0 +1,6 @@
+#Command create a new EC2 instance and provide you with an InstanceID referred to as <new-instance-id.>
+aws ec2 run-instances --key-name KEYNAME --instance-type t3.micro --image-id AMIID --user-data file:///home/ec2-user/UserData.txt --security-group-ids HTTPACCESS --subnet-id SUBNETID --associate-public-ip-address --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=WebServerBaseImage}]' --output text --query 'Instances[*].InstanceId'
+
+#Used to monitor the new EC2 instance staus.  Replace <NEW-INSTANCE-ID> with the value from approve command.
+#Wait for the command to return to a prompt.  This occurs once instance is running.
+aws ec2 wait instance-running --instance-ids NEW-INSTANCE-ID

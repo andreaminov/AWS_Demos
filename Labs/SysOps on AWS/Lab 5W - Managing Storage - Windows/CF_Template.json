@@ -1,0 +1,400 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Description": "SysOps Lab 4: Managing Storage on AWS (Windows)",
+	"Parameters": {
+		"VPCCIDR": {
+			"Description": "CIDR Block for VPC",
+			"Type": "String",
+			"Default": "10.5.0.0/16",
+			"AllowedValues": ["10.5.0.0/16"]
+		},
+		"PublicSubnet1Param": {
+			"Description": "Public Subnet 1",
+			"Type": "String",
+			"Default": "10.5.0.0/24",
+			"AllowedValues": ["10.5.0.0/24"]
+		},
+		"KeyName": {
+			"Type": "AWS::EC2::KeyPair::KeyName"
+		},
+		"WindowsAmiId": {
+			"Description": "The name of the Windows AMI to find based on search",
+			"Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+			"Default": "/aws/service/ami-windows-latest/Windows_Server-2016-English-Full-Base"
+		}
+	},
+	"Resources": {
+		"VPC": {
+			"Type": "AWS::EC2::VPC",
+			"Properties": {
+				"CidrBlock": {
+					"Ref": "VPCCIDR"
+				},
+				"EnableDnsSupport": "true",
+				"EnableDnsHostnames": "true",
+				"Tags": [{
+						"Key": "VPC",
+						"Value": "NAT-and-CLI"
+					},
+					{
+						"Key": "Name",
+						"Value": "Lab VPC"
+					}
+				]
+			}
+		},
+		"InternetGateway": {
+			"Type": "AWS::EC2::InternetGateway",
+			"DependsOn": "VPC"
+		},
+		"AttachGateway": {
+			"Type": "AWS::EC2::VPCGatewayAttachment",
+			"DependsOn": ["VPC", "InternetGateway"],
+			"Properties": {
+				"VpcId": {
+					"Ref": "VPC"
+				},
+				"InternetGatewayId": {
+					"Ref": "InternetGateway"
+				}
+			}
+		},
+		"PublicSubnet1": {
+			"Type": "AWS::EC2::Subnet",
+			"DependsOn": "AttachGateway",
+			"Properties": {
+				"VpcId": {
+					"Ref": "VPC"
+				},
+				"CidrBlock": {
+					"Ref": "PublicSubnet1Param"
+				},
+				"MapPublicIpOnLaunch": "true",
+				"AvailabilityZone": {
+					"Fn::Select": ["0", {
+						"Fn::GetAZs": ""
+					}]
+				},
+				"Tags": [{
+					"Key": "Name",
+					"Value": "Public Subnet 1"
+				}]
+			}
+		},
+		"PublicRouteTable": {
+			"Type": "AWS::EC2::RouteTable",
+			"DependsOn": ["VPC", "AttachGateway"],
+			"Properties": {
+				"VpcId": {
+					"Ref": "VPC"
+				},
+				"Tags": [{
+					"Key": "Name",
+					"Value": "Public"
+				}]
+			}
+		},
+		"PublicRoute": {
+			"Type": "AWS::EC2::Route",
+			"DependsOn": ["PublicRouteTable", "AttachGateway"],
+			"Properties": {
+				"RouteTableId": {
+					"Ref": "PublicRouteTable"
+				},
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"GatewayId": {
+					"Ref": "InternetGateway"
+				}
+			}
+		},
+		"PublicSubnet1RouteTableAssociation": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"DependsOn": ["PublicRouteTable", "PublicSubnet1", "AttachGateway"],
+			"Properties": {
+				"SubnetId": {
+					"Ref": "PublicSubnet1"
+				},
+				"RouteTableId": {
+					"Ref": "PublicRouteTable"
+				}
+			}
+		},
+		"RDPAccess": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"DependsOn": "AttachGateway",
+			"Properties": {
+				"GroupDescription": "SAccess via RDP",
+				"VpcId": {
+					"Ref": "VPC"
+				},
+				"Tags": [{
+					"Key": "Name",
+					"Value": "RDPAccess"
+				}],
+				"SecurityGroupEgress": [{
+						"IpProtocol": "tcp",
+						"FromPort": "0",
+						"ToPort": "65535",
+						"CidrIp": "0.0.0.0/0"
+					},
+					{
+						"IpProtocol": "udp",
+						"FromPort": "0",
+						"ToPort": "65535",
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"SecurityGroupIngress": [{
+					"IpProtocol": "tcp",
+					"FromPort": "3389",
+					"ToPort": "3389",
+					"CidrIp": "0.0.0.0/0"
+				}]
+			}
+		},
+		"RootRole": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [{
+						"Effect": "Allow",
+						"Principal": {
+							"Service": ["ec2.amazonaws.com"]
+						},
+						"Action": ["sts:AssumeRole"]
+					}]
+				},
+				"Path": "/",
+				"Policies": [{
+					"PolicyName": "root",
+					"PolicyDocument": {
+						"Version": "2012-10-17",
+						"Statement": [{
+							"Effect": "Allow",
+							"Action": "*",
+							"Resource": "*"
+						}]
+					}
+				}]
+			}
+		},
+		"RootInstanceProfile": {
+			"Type": "AWS::IAM::InstanceProfile",
+			"DependsOn": "RootRole",
+			"Properties": {
+				"Path": "/",
+				"Roles": [{
+					"Ref": "RootRole"
+				}]
+			}
+		},
+		"WaitHandle01": {
+			"Type": "AWS::CloudFormation::WaitConditionHandle",
+			"Properties": {}
+		},
+		"WaitCondition01": {
+			"Type": "AWS::CloudFormation::WaitCondition",
+			"DependsOn": "CommandHostInstance",
+			"Properties": {
+				"Handle": {
+					"Ref": "WaitHandle01"
+				},
+				"Timeout": "3600"
+			}
+		},
+		"CommandHostInstance": {
+			"Type": "AWS::EC2::Instance",
+			"DependsOn": [
+				"RootInstanceProfile",
+				"PublicSubnet1",
+				"RDPAccess",
+				"AttachGateway"
+			],
+			"Properties": {
+				"KeyName": {
+					"Ref": "KeyName"
+				},
+				"IamInstanceProfile": {
+					"Ref": "RootInstanceProfile"
+				},
+				"ImageId": {
+					"Ref": "WindowsAmiId"
+				},
+				"InstanceType": "t2.medium",
+				"NetworkInterfaces": [{
+					"DeviceIndex": "0",
+					"AssociatePublicIpAddress": "true",
+					"SubnetId": {
+						"Ref": "PublicSubnet1"
+					},
+					"GroupSet": [{
+						"Ref": "RDPAccess"
+					}]
+				}],
+				"Tags": [{
+					"Key": "Name",
+					"Value": "Command Host"
+				}],
+				"UserData": {
+					"Fn::Base64": {
+						"Fn::Join": [
+							"",
+							[
+								"<script>\n",
+								"cfn-init.exe -v -s ",
+								{
+									"Ref": "AWS::StackName"
+								},
+								" -r CommandHostInstance",
+								" --region ",
+								{
+									"Ref": "AWS::Region"
+								},
+								"\n",
+								"cfn-signal.exe -e %ERRORLEVEL% ",
+								{
+									"Fn::Base64": {
+										"Ref": "WaitHandle01"
+									}
+								},
+								"\n",
+								"</script>"
+							]
+						]
+					}
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Init": {
+					"config": {
+						"packages": {
+							"msi": {
+								"awscli": "https://s3.amazonaws.com/aws-cli/AWSCLI64.msi",
+								"awsdotnet": "https://sdk-for-net.amazonwebservices.com/latest/AWSToolsAndSDKForNet.msi"
+							}
+						},
+						"files": {
+							"c:\\users\\administrator\\.aws\\config": {
+								"content": {
+									"Fn::Join": [
+										"",
+										[
+											"[default]\r\n",
+											"region = ",
+											{
+												"Ref": "AWS::Region"
+											},
+											"\r\n"
+										]
+									]
+								}
+							},
+							"c:\\temp\\ntrights.exe": {
+								"source": "https://us-west-2-tcprod.s3.amazonaws.com/courses/ILT-TF-100-SYSOPS/v3.3.15/lab-5-storage-windows/scripts/ntrights.exe"
+							},
+							"c:\\temp\\snapshotter.ps1": {
+								"source": "https://us-west-2-tcprod.s3.amazonaws.com/courses/ILT-TF-100-SYSOPS/v3.3.15/lab-5-storage-windows/scripts/snapshotter.ps1"
+							}
+						}
+					}
+				}
+			}
+		},
+		"ProcessorHostInstance": {
+			"Type": "AWS::EC2::Instance",
+			"DependsOn": [
+				"RootInstanceProfile",
+				"PublicSubnet1",
+				"RDPAccess",
+				"AttachGateway"
+			],
+			"Properties": {
+				"KeyName": {
+					"Ref": "KeyName"
+				},
+				"ImageId": {
+					"Ref": "WindowsAmiId"
+				},
+				"InstanceType": "t2.medium",
+				"NetworkInterfaces": [{
+					"DeviceIndex": "0",
+					"AssociatePublicIpAddress": "true",
+					"SubnetId": {
+						"Ref": "PublicSubnet1"
+					},
+					"GroupSet": [{
+						"Ref": "RDPAccess"
+					}]
+				}],
+				"Tags": [{
+					"Key": "Name",
+					"Value": "Processor"
+				}],
+				"UserData": {
+					"Fn::Base64": {
+						"Fn::Join": [
+							"",
+							[
+								"<script>\n",
+								"cfn-init.exe -v -s ",
+								{
+									"Ref": "AWS::StackName"
+								},
+								" -r CommandHostInstance",
+								" --region ",
+								{
+									"Ref": "AWS::Region"
+								},
+								"\n",
+								"cfn-signal.exe -e %ERRORLEVEL% ",
+								{
+									"Fn::Base64": {
+										"Ref": "WaitHandle01"
+									}
+								},
+								"\n",
+								"</script>"
+							]
+						]
+					}
+				}
+			},
+			"Metadata": {
+				"AWS::CloudFormation::Init": {
+					"config": {
+						"packages": {
+							"msi": {
+								"awscli": "https://s3.amazonaws.com/aws-cli/AWSCLI64.msi",
+								"awsdotnet": "https://sdk-for-net.amazonwebservices.com/latest/AWSToolsAndSDKForNet.msi"
+							}
+						},
+						"files": {
+							"c:\\users\\administrator\\.aws\\config": {
+								"content": {
+									"Fn::Join": [
+										"",
+										[
+											"[default]\r\n",
+											"region = ",
+											{
+												"Ref": "AWS::Region"
+											},
+											"\r\n"
+										]
+									]
+								}
+							},
+							"c:\\temp\\ntrights.exe": {
+								"source": "https://us-west-2-tcprod.s3.amazonaws.com/courses/ILT-TF-100-SYSOPS/v3.3.15/lab-5-storage-windows/scripts/ntrights.exe"
+							},
+							"c:\\temp\\snapshotter.ps1": {
+								"source": "https://us-west-2-tcprod.s3.amazonaws.com/courses/ILT-TF-100-SYSOPS/v3.3.15/lab-5-storage-windows/scripts/snapshotter.ps1"
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

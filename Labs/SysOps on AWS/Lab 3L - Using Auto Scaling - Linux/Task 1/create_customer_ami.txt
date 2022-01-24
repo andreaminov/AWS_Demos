@@ -1,0 +1,2 @@
+#Command creates a new AMI based on running instance.
+aws ec2 create-image --name WebServer --instance-id NEW-INSTANCE-ID

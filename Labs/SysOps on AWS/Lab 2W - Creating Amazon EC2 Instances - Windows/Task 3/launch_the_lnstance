@@ -1,0 +1,4 @@
+$INSTANCE = (
+aws ec2 run-instances --image-id $AMI --subnet-id $SUBNET --security-group-ids $SG --key-name $KEYPAIR --user-data file://c:\temp\UserData.txt --instance-type t2.small --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=Web Server}]" --query "Instances[*].InstanceId" --output text
+)
+echo $INSTANCE
